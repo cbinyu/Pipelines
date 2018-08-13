@@ -17,8 +17,9 @@ set -e
 #  Load Function Libraries
 # --------------------------------------------------------------------------------
 
-source $HCPPIPEDIR/global/scripts/log.shlib  # Logging related functions
-source $HCPPIPEDIR/global/scripts/opts.shlib # Command line option functions
+source ${HCPPIPEDIR_Global}/log.shlib  # Logging related functions
+source ${HCPPIPEDIR_Global}/opts.shlib # Command line option functions
+
 
 ################################################ SUPPORT FUNCTIONS ##################################################
 
@@ -27,7 +28,47 @@ source $HCPPIPEDIR/global/scripts/opts.shlib # Command line option functions
 # --------------------------------------------------------------------------------
 
 show_usage() {
-    echo "Usage information To Be Written"
+    cat <<EOF
+        
+GenericfMRIVolumeProcessingPipeline.sh
+
+Usage: GenericfMRIVolumeProcessingPipeline.sh [options]
+
+  --path=<path>           Path to study processed data folder (required)
+                          Used with --subject input to create full path to root 
+                          directory for all outputs generated as path/subject
+  --subject=<subject>     Subject ID (required)
+                          Used with --path input to create full path to root
+                          directory for all outputs generated as path/subject
+  --fmriname=<fmriname>   Name of the functional task to be processed
+  --fmritcs=<fmritcs>     Name of the fMRI time series to be processed
+  --fmriscout=<fmriscout> Name of the image to be used as reference for the motion
+                          correction for the series
+  --fmapmag=<file path>          Fieldmap magnitude file
+  --fmapphase=<file path>        Fieldmap phase file
+  --echodiff=<delta TE>          Delta TE in ms for field map or "NONE" if 
+                                 not used
+  --SEPhaseNeg={LR, RL, NONE}    For spin echo field map volume with a negative
+                                 phase encoding direction (LR in HCP data), set
+                                 to "NONE" if using regular FIELDMAP
+  --SEPhasePos={LR, RL, NONE}    For the spin echo field map volume with a 
+                                 positive phase encoding direction (RL in HCP 
+                                 data), set to "NONE" if using regular FIELDMAP
+  --SE_TotalReadoutTime=<SE_TotalReadoutTime>     Total Readout time for the Spin Echo Distortion
+                                 Map or "NONE" if not used
+  --unwarpdir={x, y, z}        Phase encoding direction of the fMRI time series.
+                               (Used with either a regular field map or a spin
+                               echo field map).  If spin echo distortion maps are
+                               used for B0 correction, both the fMRI and the SE images
+                               need to have the same PE direction.
+  --fmrires=<fmrires>          Desired resolution of the processed images (in mm).
+  --gdcoeffs=<file path>       File containing gradient distortion 
+                               coefficients, Set to "NONE" to turn off
+  --dcmethod={FIELDMAP, TOPUP} Type of field map used for B0 distortion correction.
+  --topupconfig=<file path>    Configuration file for topup or "NONE" if not used.
+  --printcom={echo, ""}        Use ="echo" for just printing everything and not running the commands (default is to run)
+EOF
+
     exit 1
 }
 
@@ -47,16 +88,17 @@ fi
 log_Msg "Parsing Command Line Options"
 
 # parse arguments
-Path=`opts_GetOpt1 "--path" $@`  # "$1"
+OutputStudyFolder=`opts_GetOpt1 "--path" $@`  # "$1"
 Subject=`opts_GetOpt1 "--subject" $@`  # "$2"
 NameOffMRI=`opts_GetOpt1 "--fmriname" $@`  # "$6"
 fMRITimeSeries=`opts_GetOpt1 "--fmritcs" $@`  # "$3"
 fMRIScout=`opts_GetOpt1 "--fmriscout" $@`  # "$4"
 SpinEchoPhaseEncodeNegative=`opts_GetOpt1 "--SEPhaseNeg" $@`  # "$7"
 SpinEchoPhaseEncodePositive=`opts_GetOpt1 "--SEPhasePos" $@`  # "$5"
+SE_RO_Time=`opts_GetOpt1 "--SE_TotalReadoutTime" $@` # "$"
+SBRef_RO_Time=`opts_GetOpt1 "--SBRef_TotalReadoutTime" $@` # "$6"
 MagnitudeInputName=`opts_GetOpt1 "--fmapmag" $@`  # "$8" #Expects 4D volume with two 3D timepoints
 PhaseInputName=`opts_GetOpt1 "--fmapphase" $@`  # "$9"
-DwellTime=`opts_GetOpt1 "--echospacing" $@`  # "${11}"
 deltaTE=`opts_GetOpt1 "--echodiff" $@`  # "${12}"
 UnwarpDir=`opts_GetOpt1 "--unwarpdir" $@`  # "${13}"
 FinalfMRIResolution=`opts_GetOpt1 "--fmrires" $@`  # "${14}"
@@ -64,6 +106,28 @@ DistortionCorrection=`opts_GetOpt1 "--dcmethod" $@`  # "${17}" #FIELDMAP or TOPU
 GradientDistortionCoeffs=`opts_GetOpt1 "--gdcoeffs" $@`  # "${18}"
 TopupConfig=`opts_GetOpt1 "--topupconfig" $@`  # "${20}" #NONE if Topup is not being used
 RUN=`opts_GetOpt1 "--printcom" $@`  # use ="echo" for just printing everything and not running the commands (default is to run)
+
+# ------------------------------------------------------------------------------
+#  Show Command Line Options
+# ------------------------------------------------------------------------------
+
+log_Msg "OutputStudyFolder: ${OutputStudyFolder}"
+log_Msg "Subject: ${Subject}"
+log_Msg "NameOffMRI: ${NameOffMRI}"
+log_Msg "fMRITimeSeries: ${fMRITimeSeries}"
+log_Msg "fMRIScout: ${fMRIScout}"
+log_Msg "SpinEchoPhaseEncodeNegative: ${SpinEchoPhaseEncodeNegative}"
+log_Msg "SpinEchoPhaseEncodePositive: ${SpinEchoPhaseEncodePositive}"
+log_Msg "SE_RO_Time: ${SE_RO_Time}"
+log_Msg "SBRef_RO_Time: ${SBRef_RO_Time}"
+log_Msg "MagnitudeInputName: ${MagnitudeInputName}"
+log_Msg "PhaseInputName: ${PhaseInputName}"
+log_Msg "deltaTE: ${deltaTE}"
+log_Msg "UnwarpDir: ${UnwarpDir}"
+log_Msg "FinalfMRIResolution: ${FinalfMRIResolution}"
+log_Msg "DistortionCorrection: ${DistortionCorrection}"
+log_Msg "GradientDistortionCoeffs: ${GradientDistortionCoeffs}"
+log_Msg "TopupConfig: ${TopupConfig}"
 
 # Setup PATHS
 PipelineScripts=${HCPPIPEDIR_fMRIVol}
@@ -100,14 +164,17 @@ JacobianOut="Jacobian"
 
 ########################################## DO WORK ########################################## 
 
-T1wFolder="$Path"/"$Subject"/"$T1wFolder"
-AtlasSpaceFolder="$Path"/"$Subject"/"$AtlasSpaceFolder"
-ResultsFolder="$AtlasSpaceFolder"/"$ResultsFolder"/"$NameOffMRI"
+# to distinguish between different runs and acquisitions:
+acqRun=${fMRITimeSeries##*_task-${NameOffMRI}_}
+acqRun=${acqRun%_bold.nii*}
 
-fMRIFolder="$Path"/"$Subject"/"$NameOffMRI"
+T1wFolder="$OutputStudyFolder"/"sub-$Subject"/"$T1wFolder"
+AtlasSpaceFolder="$OutputStudyFolder"/"sub-$Subject"/"$AtlasSpaceFolder"
+ResultsFolder="$AtlasSpaceFolder"/"$ResultsFolder"/"$NameOffMRI"/"$acqRun"
+fMRIFolder="$OutputStudyFolder"/"sub-$Subject"/"$NameOffMRI"/"$acqRun"
 if [ ! -e "$fMRIFolder" ] ; then
-  log_Msg "mkdir ${fMRIFolder}"
-  mkdir "$fMRIFolder"
+  log_Msg "mkdir -p ${fMRIFolder}"
+  mkdir -p "$fMRIFolder"
 fi
 cp "$fMRITimeSeries" "$fMRIFolder"/"$OrigTCSName".nii.gz
 
@@ -117,6 +184,8 @@ if [ $fMRIScout = "NONE" ] ; then
 else
   cp "$fMRIScout" "$fMRIFolder"/"$OrigScoutName".nii.gz
 fi
+scout_RO_Time=${SBRef_RO_Time}
+
 
 #Gradient Distortion Correction of fMRI
 log_Msg "Gradient Distortion Correction of fMRI"
@@ -157,6 +226,7 @@ ${RUN} "$PipelineScripts"/MotionCorrection_FLIRTbased.sh \
     "$fMRIFolder"/"$MotionMatrixFolder" \
     "$MotionMatrixPrefix" 
 
+
 #EPI Distortion Correction and EPI to T1w Registration
 log_Msg "EPI Distortion Correction and EPI to T1w Registration"
 if [ -e ${fMRIFolder}/DistortionCorrectionAndEPIToT1wReg_FLIRTBBRAndFreeSurferBBRbased ] ; then
@@ -176,7 +246,8 @@ ${RUN} ${PipelineScripts}/DistortionCorrectionAndEPIToT1wReg_FLIRTBBRAndFreeSurf
     --echodiff=${deltaTE} \
     --SEPhaseNeg=${SpinEchoPhaseEncodeNegative} \
     --SEPhasePos=${SpinEchoPhaseEncodePositive} \
-    --echospacing=${DwellTime} \
+    --SE_TotalReadoutTime=${SE_RO_Time} \
+    --scout_TotalReadoutTime=${scout_RO_Time} \
     --unwarpdir=${UnwarpDir} \
     --owarp=${T1wFolder}/xfms/${fMRI2strOutputTransform} \
     --biasfield=${T1wFolder}/${BiasField} \

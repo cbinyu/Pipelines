@@ -268,7 +268,7 @@ validate_environment_vars() {
 #
 main() {
     # Hard-Coded variables for the pipeline
-    CombineDataFlag=1  # If JAC resampling has been used in eddy, decide what to do with the output file
+    CombineDataFlag=2  # If JAC resampling has been used in eddy, decide what to do with the output file
                        # 2 for including in the output all volumes uncombined (i.e. output file of eddy)
                        # 1 for including in the output and combine only volumes where both LR/RL 
                        #   (or AP/PA) pairs have been acquired
@@ -293,8 +293,8 @@ main() {
     log_SetToolName "DiffPreprocPipeline_PostEddy.sh"
 
     # Establish output directory paths
-    outdir=${StudyFolder}/${Subject}/Diffusion
-    outdirT1w=${StudyFolder}/${Subject}/T1w/Diffusion
+    outdir=${StudyFolder}/sub-${Subject}/Diffusion
+    outdirT1w=${StudyFolder}/sub-${Subject}/T1w/Diffusion
 
     # Determine whether Gradient Nonlinearity Distortion coefficients are supplied
     GdFlag=0
@@ -307,7 +307,7 @@ main() {
     ${runcmd} ${HCPPIPEDIR_dMRI}/eddy_postproc.sh ${outdir} ${GdCoeffs} ${CombineDataFlag}
 
     # Establish variables that follow naming conventions
-    T1wFolder="${StudyFolder}/${Subject}/T1w" #Location of T1w images
+    T1wFolder="${StudyFolder}/sub-${Subject}/T1w" #Location of T1w images
     T1wImage="${T1wFolder}/T1w_acpc_dc"
     T1wRestoreImage="${T1wFolder}/T1w_acpc_dc_restore"
     T1wRestoreImageBrain="${T1wFolder}/T1w_acpc_dc_restore_brain"

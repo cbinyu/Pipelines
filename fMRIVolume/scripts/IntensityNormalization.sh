@@ -120,8 +120,10 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "cd `pwd`" >> $WD/qa.txt
+echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Check that the fMRI and Scout images look OK and that the mean intensity across the timeseries is about 10000" >> $WD/qa.txt
-echo "fslview ${ScoutOutput} ${OutputfMRI}" >> $WD/qa.txt
+echo "fslview ../`basename ${ScoutOutput}` ../`basename ${OutputfMRI}`" >> $WD/qa.txt
 
 ##############################################################################################
+

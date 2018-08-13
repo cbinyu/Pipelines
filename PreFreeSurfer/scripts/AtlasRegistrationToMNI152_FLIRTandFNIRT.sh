@@ -133,10 +133,12 @@ ${FSLDIR}/bin/applywarp --rel --interp=nn -i ${T1wRestoreBrain} -r ${Reference} 
 ${FSLDIR}/bin/fslmaths ${OutputT1wImageRestore} -mas ${OutputT1wImageRestoreBrain} ${OutputT1wImageRestoreBrain}
 
 # T2w set of warped outputs (brain/whole-head + restored/orig)
-${FSLDIR}/bin/applywarp --rel --interp=spline -i ${T2wImage} -r ${Reference} -w ${OutputTransform} -o ${OutputT2wImage}
-${FSLDIR}/bin/applywarp --rel --interp=spline -i ${T2wRestore} -r ${Reference} -w ${OutputTransform} -o ${OutputT2wImageRestore}
-${FSLDIR}/bin/applywarp --rel --interp=nn -i ${T2wRestoreBrain} -r ${Reference} -w ${OutputTransform} -o ${OutputT2wImageRestoreBrain}
-${FSLDIR}/bin/fslmaths ${OutputT2wImageRestore} -mas ${OutputT2wImageRestoreBrain} ${OutputT2wImageRestoreBrain}
+if [ ! $T2wImage = "NONE" ] ; then
+  ${FSLDIR}/bin/applywarp --rel --interp=spline -i ${T2wImage} -r ${Reference} -w ${OutputTransform} -o ${OutputT2wImage}
+  ${FSLDIR}/bin/applywarp --rel --interp=spline -i ${T2wRestore} -r ${Reference} -w ${OutputTransform} -o ${OutputT2wImageRestore}
+  ${FSLDIR}/bin/applywarp --rel --interp=nn -i ${T2wRestoreBrain} -r ${Reference} -w ${OutputTransform} -o ${OutputT2wImageRestoreBrain}
+  ${FSLDIR}/bin/fslmaths ${OutputT2wImageRestore} -mas ${OutputT2wImageRestoreBrain} ${OutputT2wImageRestoreBrain}
+fi
 
 echo " "
 echo " END: AtlasRegistration to MNI152"
@@ -145,9 +147,15 @@ echo " END: `date`" >> $WD/xfms/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/xfms/qa.txt ] ; then rm -f $WD/xfms/qa.txt ; fi
-echo "cd `pwd`" >> $WD/xfms/qa.txt
+echo "# First, cd to the directory with this file is found." >> $WD/xfms/qa.txt
+echo "# Then, define the following environmental variable:" >> $WD/xfms/qa.txt
+echo "export TEMPLATEDIR=           # this is the folder with templates from the HCP Pipelines" >> $WD/xfms/qa.txt
+echo "                              # (you can grab it from CBIUserData/cbishare/HCPPipelinesTemplates)" >> $WD/xfms/qa.txt
+echo "" >> $WD/xfms/qa.txt
 echo "# Check quality of alignment with MNI image" >> $WD/xfms/qa.txt
-echo "fslview ${Reference} ${OutputT1wImageRestore}" >> $WD/xfms/qa.txt
-echo "fslview ${Reference} ${OutputT2wImageRestore}" >> $WD/xfms/qa.txt
+echo "fslview \$TEMPLATEDIR/`basename $Reference` ../`basename ${OutputT1wImageRestore}`" >> $WD/xfms/qa.txt
+if [ ! $T2wImage = "NONE" ] ; then
+  echo "fslview \$TEMPLATEDIR/`basename $Reference` ../`basename ${OutputT2wImageRestore}`" >> $WD/xfms/qa.txt
+fi
 
 ##############################################################################################

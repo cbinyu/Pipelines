@@ -249,7 +249,7 @@ main() {
     log_SetToolName "DiffPreprocPipeline_Eddy.sh"
 
     # Establish output directory paths
-    outdir=${StudyFolder}/${Subject}/Diffusion
+    outdir=${StudyFolder}/sub-${Subject}/Diffusion
 
     log_Msg "Running Eddy"
     ${runcmd} ${HCPPIPEDIR_dMRI}/run_eddy.sh -g -w ${outdir}/eddy

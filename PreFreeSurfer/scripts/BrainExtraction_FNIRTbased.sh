@@ -102,11 +102,16 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "cd `pwd`" >> $WD/qa.txt
+echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# Then, define the following environmental variable:" >> $WD/qa.txt
+echo "export TEMPLATEDIR=           # this is the folder with templates from the HCP Pipelines" >> $WD/qa.txt
+echo "                              # (you can grab it from CBIUserData/cbishare/HCPPipelinesTemplates)" >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Check that the following brain mask does not exclude any brain tissue (and is reasonably good at not including non-brain tissue outside of the immediately surrounding CSF)" >> $WD/qa.txt
-echo "fslview $Input $OutputBrainMask -l Red -t 0.5" >> $WD/qa.txt
+echo "fslview ../`basename $Input` ../`basename $OutputBrainMask` -l Red -t 0.5" >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Optional debugging: linear and non-linear registration result" >> $WD/qa.txt
-echo "fslview $Reference2mm $WD/${BaseName}_to_MNI_roughlin.nii.gz" >> $WD/qa.txt
-echo "fslview $Reference $WD/${BaseName}_to_MNI_nonlin.nii.gz" >> $WD/qa.txt
+echo "fslview \$TEMPLATEDIR/`basename $Reference2mm` ./${BaseName}_to_MNI_roughlin" >> $WD/qa.txt
+echo "fslview \$TEMPLATEDIR/`basename $Reference` ./${BaseName}_to_MNI_nonlin" >> $WD/qa.txt
 
 ##############################################################################################

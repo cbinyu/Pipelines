@@ -99,10 +99,15 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "cd `pwd`" >> $WD/qa.txt
+echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# Then, define the following environmental variable:" >> $WD/qa.txt
+echo "export TEMPLATEDIR=           # this is the folder with templates from the HCP Pipelines" >> $WD/qa.txt
+echo "                              # (you can grab it from CBIUserData/cbishare/HCPPipelinesTemplates)" >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Check that the following image does not cut off any brain tissue" >> $WD/qa.txt
-echo "fslview $WD/robustroi" >> $WD/qa.txt
+echo "fslview ./robustroi" >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Check that the alignment to the reference image is acceptable (the top/last image is spline interpolated)" >> $WD/qa.txt
-echo "fslview $Reference $WD/acpc_final $Output" >> $WD/qa.txt
+echo "fslview \$TEMPLATEDIR/`basename $Reference` ./acpc_final ../`basename $Output`" >> $WD/qa.txt
 
 ##############################################################################################

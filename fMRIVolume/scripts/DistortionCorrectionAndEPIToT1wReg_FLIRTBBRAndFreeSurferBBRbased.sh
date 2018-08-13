@@ -20,7 +20,7 @@ Usage() {
   echo "             --echodiff=<difference of echo times for fieldmap, in milliseconds>"
   echo "             --SEPhaseNeg=<input spin echo negative phase encoding image>"
   echo "             --SEPhasePos=<input spin echo positive phase encoding image>"
-  echo "             --echospacing=<effective echo spacing of fMRI image, in seconds>"
+  echo "             --SE_TotalReadoutTime=<effective echo spacing of fMRI image, in seconds>"
   echo "             --unwarpdir=<unwarping direction: x/y/z/-x/-y/-z>"
   echo "             --owarp=<output filename for warp of EPI to T1w>"
   echo "             --biasfield=<input bias field estimate image, in fMRI space>"
@@ -89,6 +89,8 @@ T1wRestoreImage=`getopt1 "--t1restore" $@`  # "$4"
 T1wBrainImage=`getopt1 "--t1brain" $@`  # "$5"
 SpinEchoPhaseEncodeNegative=`getopt1 "--SEPhaseNeg" $@`  # "$7"
 SpinEchoPhaseEncodePositive=`getopt1 "--SEPhasePos" $@`  # "$5"
+SE_RO_Time=`getopt1 "--SE_TotalReadoutTime" $@` # "$"
+scout_RO_Time=`getopt1 "--scout_TotalReadoutTime" $@`  # "$9"
 DwellTime=`getopt1 "--echospacing" $@`  # "$9"
 MagnitudeInputName=`getopt1 "--fmapmag" $@`  # "$6"
 PhaseInputName=`getopt1 "--fmapphase" $@`  # "$7"
@@ -135,7 +137,10 @@ fi
 
 cp ${T1wBrainImage}.nii.gz ${WD}/${T1wBrainImageFile}.nii.gz
 
-###### FIELDMAP VERSION (GE FIELDMAPS) ######
+###### FIELDMAP VERSION (GRE FIELDMAPS) ######
+
+# TO-DO: double-check this:
+
 if [ $DistortionCorrection = "FIELDMAP" ] ; then
   # process fieldmap with gradient non-linearity distortion correction
   ${GlobalScripts}/FieldMapPreprocessingAll.sh \
@@ -180,7 +185,7 @@ if [ $DistortionCorrection = "FIELDMAP" ] ; then
     fslmaths ${WD}/Scout_brain_mask.nii.gz -bin ${WD}/Scout_brain_mask.nii.gz
     fslmaths ${WD}/Scout.nii.gz -mas ${WD}/Scout_brain_mask.nii.gz ${WD}/Scout_brain.nii.gz
        
-    # register scout to T1w image using fieldmap
+    # register scout to brain T1w image using fieldmap
     ${FSLDIR}/bin/epi_reg --epi=${WD}/Scout_brain.nii.gz --t1=${T1wImage} --t1brain=${WD}/${T1wBrainImageFile} --out=${WD}/${ScoutInputFile}_undistorted --fmap=${WD}/FieldMap.nii.gz --fmapmag=${WD}/Magnitude.nii.gz --fmapmagbrain=${WD}/Magnitude_brain.nii.gz --echospacing=${DwellTime} --pedir=${UnwarpDir}
   else
     # register scout to T1w image using fieldmap
@@ -195,17 +200,21 @@ if [ $DistortionCorrection = "FIELDMAP" ] ; then
   ${FSLDIR}/bin/immv ${WD}/${ScoutInputFile}_undistorted_1vol.nii.gz ${WD}/${ScoutInputFile}_undistorted2T1w_init.nii.gz
   ###Jacobian Volume FAKED for Regular Fieldmaps (all ones) ###
   ${FSLDIR}/bin/fslmaths ${T1wImage} -abs -add 1 -bin ${WD}/Jacobian2T1w.nii.gz
-    
-###### TOPUP VERSION (SE FIELDMAPS) ######
+
+###### TOPUP VERSION (SE DISTORTION-MAPS) ######
 elif [ $DistortionCorrection = "TOPUP" ] ; then
+
+  # TO-DO: Maybe I should re-use the Field-map or Distortion-map warp fields (if present)
+
   # Use topup to distortion correct the scout scans
-  #    using a blip-reversed SE pair "fieldmap" sequence
+  #    using a blip-reversed SE pair "distortion-map" sequence
   ${GlobalScripts}/TopupPreprocessingAll.sh \
       --workingdir=${WD}/FieldMap \
       --phaseone=${SpinEchoPhaseEncodeNegative} \
       --phasetwo=${SpinEchoPhaseEncodePositive} \
       --scoutin=${ScoutInputName} \
-      --echospacing=${DwellTime} \
+      --SE_TotalReadoutTime=${SE_RO_Time} \
+      --scout_TotalReadoutTime=${scout_RO_Time} \
       --unwarpdir=${UnwarpDir} \
       --owarp=${WD}/WarpField \
       --ojacobian=${WD}/Jacobian \
@@ -327,11 +336,19 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "cd `pwd`" >> $WD/qa.txt
+echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Check registration of EPI to T1w (with all corrections applied)" >> $WD/qa.txt
-echo "fslview ${T1wRestoreImage} ${RegOutput} ${QAImage}" >> $WD/qa.txt
+echo "fslview `python -c \"import os.path; print os.path.relpath('$T1wRestoreImage','$WD')\"` ../`basename ${RegOutput}` ../`basename ${QAImage}`" >> $WD/qa.txt
 echo "# Check undistortion of the scout image" >> $WD/qa.txt
-echo "fslview `dirname ${ScoutInputName}`/GradientDistortionUnwarp/Scout ${WD}/${ScoutInputFile}_undistorted" >> $WD/qa.txt
+if [ $GradientDistortionCoeffs = "NONE" ] ; then
+    # TO-DO: Fix this.  It doesn't work because of the different spaces (Scout input is in native
+    #        space, while the _undistorted image is in T1w space)
+    echo "fslview ../`basename ${ScoutInputFile}` ${ScoutInputFile}_undistorted" >> $WD/qa.txt
+else
+    echo "fslview `python -c \"import os.path; print os.path.relpath( os.path.dirname('$ScoutInputName') + '/GradientDistortionUnwarp/Scout','$WD')\"` ./${ScoutInputFile}_undistorted" >> $WD/qa.txt
+fi
 
 ##############################################################################################
+
 

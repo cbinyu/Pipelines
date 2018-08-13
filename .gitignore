@@ -11,3 +11,7 @@
 # These are sometimes proprietary and should not be 
 # checked in to a repository.
 *.grad
+
+# Ignore FreeSurfer's license and gradient coefficient tables:
+Docker/FS_license.txt
+Docker/coeff.grad

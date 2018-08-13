@@ -83,9 +83,24 @@ ${FSLDIR}/bin/fslroi ${InputFile}.nii.gz $WD/${BaseName}_vol1.nii.gz 0 1
 InputCoeffs=`${FSLDIR}/bin/fsl_abspath $InputCoefficients`
 ORIGDIR=`pwd`
 cd $WD
-echo "gradient_unwarp.py ${BaseName}_vol1.nii.gz trilinear.nii.gz siemens -g ${InputCoeffs} -n" >> log.txt
+
+## Run the unwarping:
+# Command to do the unwarping:
 # NB: gradient_unwarp.py *must* have the filename extensions written out explicitly or it will crash
-gradient_unwarp.py ${BaseName}_vol1.nii.gz trilinear.nii.gz siemens -g $InputCoeffs -n
+myCommand="gradient_unwarp.py ${BaseName}_vol1.nii.gz trilinear.nii.gz siemens -g ${InputCoeffs} -n"
+
+# get python version's two first numbers:
+pythonVersion="$(python -V 2>&1 | sed 's/.* \([0-9]\).\([0-9]\).*/\1\2/')"
+if [ ${pythonVersion} -lt 27 ]; then
+  # we need to use scl to run it with python v.2.7:
+  export myCommand
+  echo "scl enable python27 '$myCommand'" >> log.txt
+  scl enable python27 '$myCommand'   # this runs $myCommand in a new shell under python2.7
+else
+  echo $myCommand >> log.txt
+  # now, run it:
+  $(${myCommand})
+fi
 cd $ORIGDIR
 
 # Now create an appropriate warpfield output (relative convention) and apply it to all timepoints
@@ -99,12 +114,14 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "cd `pwd`" >> $WD/qa.txt
+echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Check that the image output of gradient_unwarp.py is the same as from applywarp" >> $WD/qa.txt
-echo "fslview $WD/trilinear $OutputFile" >> $WD/qa.txt
+echo "fslview ./trilinear ../`basename $OutputFile`" >> $WD/qa.txt
+echo "" >> $WD/qa.txt
 echo "# Optional (further) checking - results from fslstats should be very close to zero" >> $WD/qa.txt
-echo "applywarp --rel --interp=trilinear -i $InputFile -r $WD/${BaseName}_vol1.nii.gz -w $OutputTransform -o $WD/qa_aw_tri" >> $WD/qa.txt
-echo "fslmaths $WD/qa_aw_tri -sub $WD/trilinear $WD/diff_tri" >> $WD/qa.txt
-echo "fslstats $WD/diff_tri -a -P 100 -M" >> $WD/qa.txt
+echo "applywarp --rel --interp=trilinear -i `basename $InputFile` -r `basename ${BaseName}`_vol1 -w `python -c \"import os.path; print os.path.relpath('$OutputTransform','$WD')\"` -o qa_aw_tri" >> $WD/qa.txt
+echo "fslmaths qa_aw_tri -sub trilinear diff_tri" >> $WD/qa.txt
+echo "fslstats diff_tri -a -P 100 -M" >> $WD/qa.txt
 
 ##############################################################################################

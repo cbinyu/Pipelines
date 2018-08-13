@@ -116,15 +116,17 @@ echo " END: BiasFieldCorrection"
 echo " END: `date`" >> $WD/log.txt
 
 ########################################## QA STUFF ########################################## 
-if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "cd `pwd`" >> $WD/qa.txt
-echo "# Look at the quality of the bias corrected output (T1w is brain only)" >> $WD/qa.txt
-echo "fslview $T1wImageBrain $OutputT1wRestoredBrainImage" >> $WD/qa.txt
-echo "fslview $T2wImage $OutputT2wRestoredImage" >> $WD/qa.txt
-echo "# Optional debugging (multiplied image + masked + normalised versions)" >> $WD/qa.txt
-echo "fslview $WD/T1wmulT2w.nii.gz $WD/T1wmulT2w_brain_norm.nii.gz $WD/T1wmulT2w_brain_norm_modulate_mask -l Red -t 0.5" >> $WD/qa.txt
-echo "# Optional debugging (smoothed version, extrapolated version)" >> $WD/qa.txt
-echo "fslview $WD/T1wmulT2w_brain_norm_s${BiasFieldSmoothingSigma}.nii.gz $WD/bias_raw" >> $WD/qa.txt
 
+if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
+echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "" >> $WD/qa.txt
+echo "# Look at the quality of the bias corrected output (T1w is brain only)" >> $WD/qa.txt
+echo "fslview ../`basename $T1wImageBrain` ../`basename $OutputT1wRestoredBrainImage`" >> $WD/qa.txt
+echo "fslview ../`basename $T2wImage` ../`basename $OutputT2wRestoredImage`" >> $WD/qa.txt
+echo "" >> $WD/qa.txt
+echo "# Optional debugging (multiplied image + masked + normalised versions)" >> $WD/qa.txt
+echo "fslview ./T1wmulT2w.nii.gz ./T1wmulT2w_brain_norm.nii.gz ./T1wmulT2w_brain_norm_modulate_mask -l Red -t 0.5" >> $WD/qa.txt
+echo "# Optional debugging (smoothed version, extrapolated version)" >> $WD/qa.txt
+echo "fslview ./T1wmulT2w_brain_norm_s${BiasFieldSmoothingSigma}.nii.gz ./bias_raw" >> $WD/qa.txt
 
 ##############################################################################################

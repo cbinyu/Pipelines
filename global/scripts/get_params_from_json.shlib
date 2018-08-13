@@ -1,0 +1,111 @@
+#
+# Description:
+# 
+#   Reads a parameter from a given .json file
+#
+# Input:
+# 
+#   The first argument is the parameter name (exactly as it appears in the file,
+#      without quotes; if it has scaped quotes, it will not work)
+#   The second argument is the json file with the header parameters
+#
+read_header_param() {
+   paramName="$1"
+   jsonFile="$2"
+
+  myStr=\"$paramName\"
+  myTmp=`grep $myStr ${jsonFile}`
+  myTmp=${myTmp#*$myStr: }
+  echo ${myTmp%,}
+
+  return
+}
+
+#     #     #     #     #     #     #     #     #     #     #     #     #     #     #     
+
+#
+# Description:
+# 
+#   Reads a multi-line parameter from a given .json file (e.g., "ImageType")
+#
+# Input:
+# 
+#   The first argument is the parameter name (exactly as it appears in the file,
+#      without quotes; if it has scaped quotes, it will not work)
+#   The second argument is the json file with the header parameters
+#
+read_multiline_header_param() {
+   paramName="$1"
+   jsonFile="$2"
+
+  myStr=\"$paramName\"
+  # we know it's not going to take more than 100 lines: so grab 100
+  myTmp=`grep -A 100 $myStr ${jsonFile}`
+  myTmp=${myTmp#*$myStr: [}
+  echo ${myTmp%%"],"*}
+
+  return
+}
+
+#     #     #     #     #     #     #     #     #     #     #     #     #     #     #     
+
+#
+# Description:
+# 
+#   Calculates the DwellTime (a.k.a. Effective Echo Spacing) for a given .json file
+#
+# DwellTime: Echo Spacing or Dwelltime of spin echo EPI MRI image.
+# Dwelltime = 1/(BandwidthPerPixelPhaseEncode * # of phase encoding samples)
+#
+# Input:
+# 
+#   The json file with the header parameters
+#
+get_DwellTime() {
+   jsonFile="$1"
+
+  # Get the parameters needed for the calculation:
+  BandwidthPerPixelPhaseEncode=`read_header_param BandwidthPerPixelPhaseEncode ${jsonFile}` 
+  PhaseEncodingSteps=`read_header_param PhaseEncodingSteps ${jsonFile}`
+
+  echo "scale=9; 1/($BandwidthPerPixelPhaseEncode * $PhaseEncodingSteps)" | bc
+
+  return
+}
+
+#     #     #     #     #     #     #     #     #     #     #     #     #     #     #     
+
+#
+# Description:
+# 
+#   Calculates the TE difference for a GRE phasediff .json file
+#
+# Input:
+# 
+#   The json file with the header parameters
+#
+get_DeltaTE() {
+   jsonFile="$1"
+
+  # Get the echo times (there should be 2 of them):
+  TE1=`read_header_param "EchoTime1" ${jsonFile}`
+  TE2=`read_header_param "EchoTime2" ${jsonFile}`
+
+  # If, for whatever reason we don't have those two, just take TE1 as DeltaTE,
+  #   or, in its absence, just the TE:
+  if [ -z $TE2 ]; then
+    if [ -z $TE1 ]; then
+      DeltaTE=`read_header_param "EchoTime" ${jsonFile}`
+    else
+      DeltaTE=$TE1
+    fi
+  else
+    # Otherwise, just compute the difference:
+    DeltaTE=`echo "scale=9; $TE1 - $TE2" | bc`
+  fi
+
+  echo $DeltaTE
+
+  return
+}
+

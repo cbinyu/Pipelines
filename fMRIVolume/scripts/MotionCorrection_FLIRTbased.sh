@@ -141,3 +141,12 @@ function DeriveUnBiased {
   rm $random
 }
 
+########################################## QA STUFF ########################################## 
+
+if [ -e $WorkingDirectory/qa.txt ] ; then rm -f $WorkingDirectory/qa.txt ; fi
+echo "# First, cd to the directory with this file is found." >> $WorkingDirectory/qa.txt
+echo "" >> $WorkingDirectory/qa.txt
+echo "# Run a movie of the following 4D image and check if there is any residual motion" >> $WorkingDirectory/qa.txt
+echo "fslview ../`basename $Scout` ../`basename $OutputfMRI`" >> $WorkingDirectory/qa.txt
+
+##############################################################################################

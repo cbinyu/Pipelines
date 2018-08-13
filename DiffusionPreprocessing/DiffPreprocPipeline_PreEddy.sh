@@ -351,8 +351,8 @@ main() {
     log_SetToolName "DiffPreprocPipeline_PreEddy.sh"
 
     # Establish output directory paths
-    outdir=${StudyFolder}/${Subject}/Diffusion
-    outdirT1w=${StudyFolder}/${Subject}/T1w/Diffusion
+    outdir=${StudyFolder}/sub-${Subject}/Diffusion
+    outdirT1w=${StudyFolder}/sub-${Subject}/T1w/Diffusion
 
     # Delete any existing output sub-directories
     if [ -d ${outdir} ]; then
