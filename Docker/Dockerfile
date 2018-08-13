@@ -139,7 +139,7 @@ RUN yum -y update \
 # Install HCP Pipelines, branch 'v3.4', from github, and get folder where it is installed.
 ENV HCPPIPEDIR=${INSTALL_FOLDER}/Pipelines
 RUN mkdir ${HCPPIPEDIR} \
-    && curl -sSL https://github.com/pvelasco/Pipelines/archive/v3.4.tar.gz \
+    && curl -sSL https://github.com/cbinyu/Pipelines/archive/v3.4.tar.gz \
         | tar -vxz -C ${HCPPIPEDIR} --strip-components=1
 
 # Copy Gradient Coefficients file:
