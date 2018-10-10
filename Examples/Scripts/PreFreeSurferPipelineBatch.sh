@@ -127,10 +127,12 @@ get_Input_TXw_Images() {
 get_T1s() {
 
   local T1wImages     # list with all high-res T1 images
-  if [ -d ${BIDSStudyFolder}/sub-${Subject}/ses-* ]; then
-    T1wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/anat/sub-${Subject}_ses-*_acq-highres_*_T1w.nii*`
+  doWeHaveSessions=( $(ls -d ${BIDSStudyFolder}/sub-${Subject}/ses-* 2> /dev/null) )
+  if [ $? -eq 0 ]; then
+    # if there are sessions:
+    T1wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/anat/sub-${Subject}_ses-*_acq-highres*_T1w.nii*`
   else
-    T1wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/anat/sub-${Subject}*_acq-highres_*_T1w.nii*`
+    T1wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/anat/sub-${Subject}*_acq-highres*_T1w.nii*`
   fi
   #echo "T1wImages: ${T1wImages[@]}"
 
@@ -146,12 +148,13 @@ get_T1s() {
 get_T2s() {
 
   local T2wImages     # list with all high-res T2 images
-  if [ -d ${BIDSStudyFolder}/sub-${Subject}/ses-* ]; then
-    # try/catch:
-    T2wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/anat/sub-${Subject}_ses-*_acq-highres_*_T2w.nii*` || T2wImages="NONE"
+  doWeHaveSessions=( $(ls -d ${BIDSStudyFolder}/sub-${Subject}/ses-* 2> /dev/null) )
+  if [ $? -eq 0 ]; then
+    # if there are sessions, try/catch:
+    T2wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/anat/sub-${Subject}_ses-*_acq-highres*_T2w.nii*` || T2wImages="NONE"
   else
     # try/catch:
-    T2wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/anat/sub-${Subject}*_acq-highres_*_T2w.nii*` || T2wImages="NONE"
+    T2wImages=`ls ${BIDSStudyFolder}/sub-${Subject}/anat/sub-${Subject}*_acq-highres*_T2w.nii*` || T2wImages="NONE"
   fi
   #echo "T2wImages: ${T2wImages[@]}"
 
@@ -254,14 +257,15 @@ PRINTCOM=""
 ######################################### DO WORK ##########################################
 
 
+#echo ${BIDSStudyFolder}
 for Subject in $Subjlist ; do
   echo sub-$Subject
   
   ###   Input Images   ###
   # Check to see if there are session subfolders:
-  if [ -d ${BIDSStudyFolder}/sub-${Subject}/ses-* ]; then
-    sesFolders=`ls -d ${BIDSStudyFolder}/sub-${Subject}/ses-*`
-  else
+  sesFolders=( $(ls -d ${BIDSStudyFolder}/sub-${Subject}/ses-* 2> /dev/null) )
+  # if we didn't find any, assign it to the subject level:
+  if [ $? -gt 0 ]; then
     sesFolders=${BIDSStudyFolder}/sub-${Subject}
   fi
 
@@ -284,7 +288,6 @@ for Subject in $Subjlist ; do
   case $AvgrdcSTRING in
 
       "NONE")
-	  #Using Regular Gradient Echo Field Maps (same as for fMRIVolume pipeline)
 	  echo "user chose no B0 correction"
 	  MagnitudeInputName="NONE"
 	  PhaseInputName="NONE"
@@ -300,12 +303,14 @@ for Subject in $Subjlist ; do
 	  #Using Regular Gradient Echo Field Maps:
 	  echo "user chose Fieldmap B0 correction"
 
-	  if [ -d ${BIDSStudyFolder}/sub-${Subject}/ses-* ]; then
-	      MagnitudeInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_acq-GRE*_magnitude*.nii*` #Expects 3D or 4D (two 3D timepoints) magitude volume
-	      PhaseInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_acq-GRE*_phasediff*.nii*` #Expects 3D phase difference volume
+	  doWeHaveSessions=( $(ls -d ${BIDSStudyFolder}/sub-${Subject}/ses-* 2> /dev/null) )
+	  if [ $? -eq 0 ]; then
+	    # if there are sessions:
+	    MagnitudeInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_acq-GRE*_magnitude*.nii*` #Expects 3D or 4D (two 3D timepoints) magitude volume
+	    PhaseInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_acq-GRE*_phasediff*.nii*` #Expects 3D phase difference volume
 	  else
-	      MagnitudeInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}_acq-GRE*_magnitude*.nii*` #Expects 4D magitude volume with two 3D timepoints
-	      PhaseInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}_acq-GRE*_phasediff*.nii*` #Expects 3D phase difference volume
+	    MagnitudeInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}_acq-GRE*_magnitude*.nii*` #Expects 4D magitude volume with two 3D timepoints
+	    PhaseInputName=`ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}_acq-GRE*_phasediff*.nii*` #Expects 3D phase difference volume
 	  fi
 	  # TO-DO: if there is more than one, pick which one (maybe the one closest in time?)
 	  # For now, just keep the first one:
@@ -344,28 +349,63 @@ for Subject in $Subjlist ; do
 	  #Using Spin Echo Field Maps (same as for fMRIVolume pipeline)
 	  echo "user chose Topup B0 correction"
 
-	  if [ -d ${BIDSStudyFolder}/sub-${Subject}/ses-* ]; then
-	      #volume with a negative/positive phase encoding direction:
-	      SpinEchoPhaseEncodeNegative=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_dir-AP*.nii*`
+	  doWeHaveSessions=( $(ls -d ${BIDSStudyFolder}/sub-${Subject}/ses-* 2> /dev/null) )
+	  if [ $? -eq 0 ]; then
+	    # if there are sessions:
+            #volume with a negative/positive phase encoding direction:
+	    SpinEchoPhaseEncodeNegative=( $(ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_dir-AP*.nii* 2> /dev/null) )
+	    if [ $? -gt 0 ]; then
+	      # if we didn't find any, skip the field correction:
+	      echo "WARNING: No distortion-map runs were found."
+	      echo "WARNING: We're not doing B0 correction for Subject $Subject"
+	      AvgrdcSTRING="NONE"
+	      MagnitudeInputName="NONE"
+	      PhaseInputName="NONE"
+	      TE="NONE"
+	      SpinEchoPhaseEncodeNegative="NONE"
+	      SpinEchoPhaseEncodePositive="NONE"
+	      SE_RO_Time="NONE"
+	      SEUnwarpDir="NONE"
+	      TopupConfig="NONE"
+	    else
 	      SpinEchoPhaseEncodePositive=`ls ${BIDSStudyFolder}/sub-${Subject}/ses-*/fmap/sub-${Subject}_ses-*_dir-PA*.nii*`
+	    fi
 	  else
-	      #volume with a negative/positive phase encoding direction:
-	      SpinEchoPhaseEncodeNegative=`ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}*_dir-AP*.nii*`
+	    # no sessions:
+	    SpinEchoPhaseEncodeNegative=( $(ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}_ses-*_dir-AP*.nii* 2> /dev/null) )
+	    if [ $? -gt 0 ]; then
+	      # if we didn't find any, skip the field correction:
+	      echo "WARNING: No distortion-map runs were found."
+	      echo "WARNING: We're not doing B0 correction for Subject $Subject"
+	      AvgrdcSTRING="NONE"
+	      MagnitudeInputName="NONE"
+	      PhaseInputName="NONE"
+	      TE="NONE"
+	      SpinEchoPhaseEncodeNegative="NONE"
+	      SpinEchoPhaseEncodePositive="NONE"
+	      SE_RO_Time="NONE"
+	      SEUnwarpDir="NONE"
+	      TopupConfig="NONE"
+	    else
 	      SpinEchoPhaseEncodePositive=`ls ${BIDSStudyFolder}/sub-${Subject}/fmap/sub-${Subject}*_dir-PA*.nii*`
+	    fi
 	  fi
-	  # TO-DO: if there is more than one, pick which one (maybe the one closest in time?)
-	  # For now, just keep the first one:
-	  SpinEchoPhaseEncodeNegative=`ls ${SpinEchoPhaseEncodeNegative%%.nii*}.nii*`
-	  SpinEchoPhaseEncodePositive=`ls ${SpinEchoPhaseEncodePositive%%.nii*}.nii*`
 
-	  ##   Check shims consistency   ##
+	  # if we found distortion map files, continue:
+	  if [ $SpinEchoPhaseEncodeNegative != "NONE" ]; then
+	    # TO-DO: if there is more than one, pick which one (maybe the one closest in time?)
+	    # For now, just keep the first one:
+	    SpinEchoPhaseEncodeNegative=`ls ${SpinEchoPhaseEncodeNegative%%.nii*}.nii*`
+	    SpinEchoPhaseEncodePositive=`ls ${SpinEchoPhaseEncodePositive%%.nii*}.nii*`
+
+	    ##   Check shims consistency   ##
 	  
-	  # Before applying blindly, check that the "ShimSetting" for the fmap images was
-	  #   identical to that of the T1 high-res images (check just the first one):
-	  shimSENeg=`read_multiline_header_param "ShimSetting" ${SpinEchoPhaseEncodeNegative%.nii*}.json`
-	  shimT1w=`read_multiline_header_param "ShimSetting" ${T1wInputImages[0]%.nii*}.json`
-	  #echo "$shimSENeg == $shimT1w?"
-	  if [ ! "$shimSENeg" == "$shimT1w" ]; then
+	    # Before applying blindly, check that the "ShimSetting" for the fmap images was
+	    #   identical to that of the T1 high-res images (check just the first one):
+	    shimSENeg=`read_multiline_header_param "ShimSetting" ${SpinEchoPhaseEncodeNegative%.nii*}.json`
+	    shimT1w=`read_multiline_header_param "ShimSetting" ${T1wInputImages[0]%.nii*}.json`
+	    #echo "$shimSENeg == $shimT1w?"
+	    if [ ! "$shimSENeg" == "$shimT1w" ]; then
 	      # If the shims are different:
 	      echo "WARNING: Shims settings for anatomical images and SE Distortion Maps are not the same."
 	      echo "WARNING: We're not doing B0 correction for Subject $Subject"
@@ -378,7 +418,7 @@ for Subject in $Subjlist ; do
 	      SE_RO_Time="NONE"
 	      SEUnwarpDir="NONE"
 	      TopupConfig="NONE"
-	  else
+	    else
 	      # Do the correction (even though the shims for the T2w might be different I still want
 	      #   the correction done):
 	      SE_RO_Time=`read_header_param TotalReadoutTime ${SpinEchoPhaseEncodeNegative%.nii*}.json`
@@ -392,6 +432,7 @@ for Subject in $Subjlist ; do
 	      fi
 	      
 	      TopupConfig="b02b0.cnf" #Config for topup or "NONE" if not used
+	    fi
 	  fi
 	  ;;
   esac
