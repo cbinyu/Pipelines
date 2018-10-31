@@ -1,13 +1,39 @@
 ###########################################################
 # This is the Dockerfile to build a machine that runs the #
-# HCP Pipelines first public release (v.3.4), including   #
-# all the required dependencies at the latest versions:   #
-# (https://github.com/Washington-University/Pipelines/    #
-#blob/v3.4.0/README.md                                    #
+# HCP Pipelines first public release (v.3.4) on data      #
+# organized in a BIDS-compliant directory structure.  It  #
+# including all the required dependencies at the latest   #
+# versions: (https://github.com/Washington-University/    #
+#Pipelines/blob/v3.4.0/README.md                          #
 # -FSL                  v.5.0.6                           #
 # -FreeSurfer           v.5.3.0-HCP                       #
 # -Connectome Workbench v.1.0                             #
 # -HCP gradunwarp       v.1.0.2                           #
+#							  #
+# Notes:						  #
+# 1. The FreeSurfer license file is NOT distributed here. #
+# To be able to run FS, a link has been created pointing  #
+# to /usr/local/etc/pipelines/FS_license.txt.  You need   #
+# to place the FS license file in a folder in the host    #
+# machine, name it FS_license.txt and make sure it is     #
+# world readable.  Then, when you run the Docker image,   #
+# mount that folder as /usr/local/etc/pipelines.          #
+# E.g:							  #
+#   docker run -v /my/host/folder:/usr/local/etc/pipelines ...
+#
+# 2. The gradient coil coefficients file is also NOT      #
+# distributed here.  This file is not required to run the #
+# pipelines.  However, if you want to do the gradient non-#
+# linearity correction, you need it. For that purpose, a  #
+# link has been created pointing to                       #
+# /usr/local/etc/pipelines/coeff.grad                     #
+# You need to place the gradients coefficients file in    #
+# the same folder in the host machine, that you placed    #
+# FS_license.txt, name it coeff.grad and make sure it is #
+# world readable.  Then, when you run the Docker image,   #
+# mount that folder as /usr/local/etc/pipelines.          #
+# E.g:							  #
+#   docker run -v /my/host/folder:/usr/local/etc/pipelines ...
 ###########################################################
 
 
@@ -23,7 +49,7 @@ ENV INSTALL_FOLDER=/usr/local/
 ###   Install FSL   ###
 
 # Install FSL 5.0.6:
-# For some reason, the "fslinstaller.py" only works for newer versions.
+# "fslinstaller.py" only works for python 2.X.
 # So just download the source code for 5.0.6:
 # Note: fsl uses 'bc', and also 'numpy'
 RUN yum -y update \
@@ -75,8 +101,13 @@ RUN curl -sSL ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/5.3.0-HCP/fre
     --exclude='freesurfer/lib/qt'
 
 # Configure license 
-COPY FS_license.txt ${FREESURFER_HOME}/license.txt
-RUN chmod a+r ${FREESURFER_HOME}/license.txt
+# (Note: FS_license is not distributed here. See note in header.)
+# Create link to license file in a host folder which will be mounted
+#   at run time:
+RUN ln -s /usr/local/etc/pipelines/FS_license.txt ${FREESURFER_HOME}/license.txt
+#\
+#    && chmod a+r ${FREESURFER_HOME}/license.txt
+
 
 # Configure basic freesurfer ENV:
 ENV OS=Linux \
@@ -142,16 +173,21 @@ RUN mkdir ${HCPPIPEDIR} \
     && curl -sSL https://github.com/cbinyu/Pipelines/archive/v3.4.tar.gz \
         | tar -vxz -C ${HCPPIPEDIR} --strip-components=1
 
-# Copy Gradient Coefficients file:
-# (Note: coeff.grad is not distributed here.)
-# COPY needs at least one file to works, so we add Dockerfile
-#   and coeff.gra[d], which might exist in this folder:
-COPY Dockerfile coeff.gra[d] ${HCPPIPEDIR}/global/config/
-# Check if the coeff file exists. If so, make it readable to all users
-# (NB: for some reason, Docker doesn't like a simple [ -f ... ] && chmod ...
-RUN /bin/ls ${HCPPIPEDIR}/global/config/coeff.grad > /dev/null 2>&1 \
-    && [ $? -eq 0 ] \
-    && chmod a+r ${HCPPIPEDIR}/global/config/coeff.grad; exit 0
+# Configure Gradient Coefficients file: 
+# (Note: The Gradient Coefficients file is not distributed here. See note in header.)
+# Create link to Gradient Coefficients file in a host folder which will be mounted
+#   at run time:
+RUN ln -s /usr/local/etc/pipelines/coeff.grad ${HCPPIPEDIR}/global/config/coeff.grad
+#\
+#    && chmod a+r ${HCPPIPEDIR}/global/config/coeff.grad
+
+WORKDIR	 /tmp
+
+
+
+
+
+###########
 
 ###   Modify some batches to run them in parallel   ###
 
@@ -160,10 +196,7 @@ RUN /bin/ls ${HCPPIPEDIR}/global/config/coeff.grad > /dev/null 2>&1 \
     # (Note that ${HCPPIPEDIR} is not defined for this layer!)
 #RUN sed -i 's|--mctype=\${MCType}|& \&|' ${INSTALL_FOLDER}/*/Examples/Scripts/GenericfMRIVolumeProcessingPipelineBatch.sh
 
-WORKDIR	 /tmp
 
-
-###########
 
 # Set up the HCP Pipeline environment:
 # If you need to modify the SetUp file:
