@@ -68,7 +68,7 @@ if [ -n "${command_line_specified_BIDS_study_folder}" ]; then
     BIDSStudyFolder="${command_line_specified_BIDS_study_folder}"
 fi
 # Default option for Output folder:
-OutputStudyFolder=$BIDSStudyFolder/Processed
+OutputStudyFolder=$BIDSStudyFolder/derivatives/Processed
 if [ -n "${command_line_specified_output_study_folder}" ]; then
     OutputStudyFolder="${command_line_specified_output_study_folder}"
 fi

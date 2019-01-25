@@ -2,7 +2,7 @@
 # This is the Dockerfile to build a machine that runs the #
 # HCP Pipelines first public release (v.3.4) on data      #
 # organized in a BIDS-compliant directory structure.  It  #
-# including all the required dependencies at the latest   #
+# includes all the required dependencies at the latest    #
 # versions: (https://github.com/Washington-University/    #
 #Pipelines/blob/v3.4.0/README.md                          #
 # -FSL                  v.5.0.6                           #
@@ -29,7 +29,7 @@
 # /usr/local/etc/pipelines/coeff.grad                     #
 # You need to place the gradients coefficients file in    #
 # the same folder in the host machine, that you placed    #
-# FS_license.txt, name it coeff.grad and make sure it is #
+# FS_license.txt, name it coeff.grad and make sure it is  #
 # world readable.  Then, when you run the Docker image,   #
 # mount that folder as /usr/local/etc/pipelines.          #
 # E.g:							  #
@@ -105,9 +105,6 @@ RUN curl -sSL ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/5.3.0-HCP/fre
 # Create link to license file in a host folder which will be mounted
 #   at run time:
 RUN ln -s /usr/local/etc/pipelines/FS_license.txt ${FREESURFER_HOME}/license.txt
-#\
-#    && chmod a+r ${FREESURFER_HOME}/license.txt
-
 
 # Configure basic freesurfer ENV:
 ENV OS=Linux \
@@ -178,8 +175,6 @@ RUN mkdir ${HCPPIPEDIR} \
 # Create link to Gradient Coefficients file in a host folder which will be mounted
 #   at run time:
 RUN ln -s /usr/local/etc/pipelines/coeff.grad ${HCPPIPEDIR}/global/config/coeff.grad
-#\
-#    && chmod a+r ${HCPPIPEDIR}/global/config/coeff.grad
 
 WORKDIR	 /tmp
 
