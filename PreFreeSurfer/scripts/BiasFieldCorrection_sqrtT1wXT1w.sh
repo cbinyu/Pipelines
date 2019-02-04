@@ -118,7 +118,7 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# First, cd to the directory where this file is found." >> $WD/qa.txt
 echo "" >> $WD/qa.txt
 echo "# Look at the quality of the bias corrected output (T1w is brain only)" >> $WD/qa.txt
 echo "fslview ../`basename $T1wImageBrain` ../`basename $OutputT1wRestoredBrainImage`" >> $WD/qa.txt

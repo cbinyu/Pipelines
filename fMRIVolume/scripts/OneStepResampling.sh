@@ -214,7 +214,7 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# First, cd to the directory where this file is found." >> $WD/qa.txt
 echo "" >> $WD/qa.txt
 echo "# Check registrations to low-res standard space" >> $WD/qa.txt
 echo "fslview ./${T1wImageFile}.${FinalfMRIResolution} ./${FreeSurferBrainMaskFile}.${FinalfMRIResolution} ./${BiasFieldFile}.${FinalfMRIResolution} ../`basename ${OutputfMRI}`" >> $WD/qa.txt

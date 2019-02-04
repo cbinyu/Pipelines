@@ -99,7 +99,7 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# First, cd to the directory where this file is found." >> $WD/qa.txt
 echo "# Then, define the following environmental variable:" >> $WD/qa.txt
 echo "export TEMPLATEDIR=           # this is the folder with templates from the HCP Pipelines" >> $WD/qa.txt
 echo "                              # (you can grab it from CBIUserData/cbishare/HCPPipelinesTemplates)" >> $WD/qa.txt

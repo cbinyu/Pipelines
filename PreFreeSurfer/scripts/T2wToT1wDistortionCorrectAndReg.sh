@@ -270,7 +270,7 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# First, cd to the directory where this file is found." >> $WD/qa.txt
 echo "" >> $WD/qa.txt
 if [ ! $T2wImage = "NONE" ] ; then
   echo "# View registration result of corrected T2w to corrected T1w image: showing both images + sqrt(T1w*T2w)" >> $WD/qa.txt

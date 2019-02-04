@@ -635,7 +635,7 @@ else
   #   BiasFieldCorrection_sqrtT1wXT1w:
   qafile=${T1wFolder}/BiasFieldCorrection_sqrtT1wXT1w/qa.txt
   if [ -e $qafile ] ; then rm -f $qafile ; fi
-  echo "# First, cd to the directory with this file is found." >> $qafile
+  echo "# First, cd to the directory where this file is found." >> $qafile
   echo "" >> $qafile
   echo "# Look at the quality of the bias corrected output (T1w is brain only)" >> $qafile
   echo "fslview ../${T1wImage}_acpc_dc_brain ../${T1wImage}_acpc_dc_restore_brain" >> $qafile

@@ -147,7 +147,7 @@ echo " END: `date`" >> $WD/xfms/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/xfms/qa.txt ] ; then rm -f $WD/xfms/qa.txt ; fi
-echo "# First, cd to the directory with this file is found." >> $WD/xfms/qa.txt
+echo "# First, cd to the directory where this file is found." >> $WD/xfms/qa.txt
 echo "# Then, define the following environmental variable:" >> $WD/xfms/qa.txt
 echo "export TEMPLATEDIR=           # this is the folder with templates from the HCP Pipelines" >> $WD/xfms/qa.txt
 echo "                              # (you can grab it from CBIUserData/cbishare/HCPPipelinesTemplates)" >> $WD/xfms/qa.txt

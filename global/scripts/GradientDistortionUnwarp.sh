@@ -114,7 +114,7 @@ echo " END: `date`" >> $WD/log.txt
 ########################################## QA STUFF ########################################## 
 
 if [ -e $WD/qa.txt ] ; then rm -f $WD/qa.txt ; fi
-echo "# First, cd to the directory with this file is found." >> $WD/qa.txt
+echo "# First, cd to the directory where this file is found." >> $WD/qa.txt
 echo "" >> $WD/qa.txt
 echo "# Check that the image output of gradient_unwarp.py is the same as from applywarp" >> $WD/qa.txt
 echo "fslview ./trilinear ../`basename $OutputFile`" >> $WD/qa.txt

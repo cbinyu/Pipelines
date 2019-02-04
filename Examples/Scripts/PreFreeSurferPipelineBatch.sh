@@ -473,7 +473,7 @@ for Subject in $Subjlist ; do
   # TO-DO: get the readout direction (as x, y or z)
 
   #Other Config Settings
-  BrainSize="150" #BrainSize in mm, 150 for humans
+  BrainSize="170" #BrainSize in mm, 170 for humans
   FNIRTConfig="${HCPPIPEDIR_Config}/T1_2_MNI152_2mm.cnf" #FNIRT 2mm T1w Config
   GradientDistortionCoeffs="${HCPPIPEDIR_Config}/coeff.grad"   # Default location of Coeffs file
   # if it doesn't exist, skip it:
