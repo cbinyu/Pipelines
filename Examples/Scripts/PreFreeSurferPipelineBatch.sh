@@ -147,7 +147,7 @@ get_T1s() {
   # Get the unique ones (e.g.: normalized and unnormalized):
   T1wInputImages=`get_Input_TXw_Images ${T1wImages[@]}`
  
-  echo "Found ${#T1wInputImages[@]} T1w Images for subject ${Subject}"
+  echo "Found $(awk -F "@" '{print NF}' <<< "${T1wInputImages}") T1w Images for subject ${Subject}"
   #echo "T1wInputImages: ${T1wInputImages[@]}"
 
   return  
@@ -169,7 +169,7 @@ get_T2s() {
   if [ ! ${T2wImages%%.nii*} = "NONE" ] ; then
     # Get the unique ones (e.g.: normalized and unnormalized):
     T2wInputImages=`get_Input_TXw_Images ${T2wImages[@]}`
-    echo "Found ${#T2wInputImages[@]} T2w Images for subject ${Subject}"
+    echo "Found $(awk -F "@" '{print NF}' <<< "${T2wInputImages}") T2w Images for subject ${Subject}"
   else
     T2wInputImages="NONE"
     echo "No T2w Images were found for subject ${Subject}"
