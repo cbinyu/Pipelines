@@ -62,6 +62,8 @@ get_Input_TXw_Images() {
   # Function to select the TXw (T1w or T2w) images to use as input to the PreFreeSurferPipeline
   # given a list of runs.  It checks if some of these runs have the same acquisition times and,
   # if there are some that do, picks the (first) non-normalized one.
+  # It returns the list as a single variable with the **file paths separated by "@"**
+  # (that's the format expected by PreFreeSurferPipeline.sh)
 
   # Transform argument list into an array, for easier element access:
   local TXwImages=($@)
@@ -108,7 +110,7 @@ get_Input_TXw_Images() {
   	      # Discard the "Normalized" ones, and pick the first non-normalized:
 	      if ! [[ $myImageType == *\"NORM\"* ]]; then
   		  # If it is NOT normalized:
-		  T1wInputImages[$j]=${TXwImages[${inds[$k]}]}
+		  TXwInputImages[$j]=${TXwImages[${inds[$k]}]}
 		  break
 	      fi
 	      k=$(($k+1))
@@ -125,8 +127,8 @@ get_Input_TXw_Images() {
       j=$(($j+1))
   done
 
-  # The output:
-  echo "${TXwInputImages[@]}"
+  # The output (converting the spaces into "@"):
+  echo "${TXwInputImages[@]}" | sed 's/ /@/g'
   return 0
 }
 
@@ -277,9 +279,11 @@ for Subject in $Subjlist ; do
 
   # Get T1 images (they will be stored in the variable "T1wInputImages")
   get_T1s $Subject
+  firstT1w="${T1wInputImages%%@*}"    # first one of the list (they are separated by "@")
   
   # Get T2 images (they will be stored in the variable "T2wInputImages")
   get_T2s $Subject
+  firstT2w="${T2wInputImages%%@*}"    # first one of the list (they are separated by "@")
   
   
   ###    B0 Distortion Correction    ###
@@ -328,7 +332,7 @@ for Subject in $Subjlist ; do
 	  # Before applying blindly, check that the "ShimSetting" for the fmap images was
 	  #   identical to that of the T1 high-res images (check just the first one):
 	  shimGRE=`read_multiline_header_param "ShimSetting" ${MagnitudeInputName%.nii*}.json`
-	  shimT1w=`read_multiline_header_param "ShimSetting" ${T1wInputImages[0]%.nii*}.json`
+	  shimT1w=`read_multiline_header_param "ShimSetting" ${firstT1w%.nii*}.json`
 	  #echo "$shimGRE == $shimT1w?"
 	  if [ ! "$shimGRE" == "$shimT1w" ]; then
 	    # If the shims are different:
@@ -409,7 +413,7 @@ for Subject in $Subjlist ; do
 	    # Before applying blindly, check that the "ShimSetting" for the fmap images was
 	    #   identical to that of the T1 high-res images (check just the first one):
 	    shimSENeg=`read_multiline_header_param "ShimSetting" ${SpinEchoPhaseEncodeNegative%.nii*}.json`
-	    shimT1w=`read_multiline_header_param "ShimSetting" ${T1wInputImages[0]%.nii*}.json`
+	    shimT1w=`read_multiline_header_param "ShimSetting" ${firstT1w%.nii*}.json`
 	    #echo "$shimSENeg == $shimT1w?"
 	    if [ ! "$shimSENeg" == "$shimT1w" ]; then
 	      # If the shims are different:
@@ -459,12 +463,12 @@ for Subject in $Subjlist ; do
   # (set all to NONE if not doing readout distortion correction)
   # We get it from the corresponding .json file:
 
-  T1wSampleSpacing=`read_header_param "DwellTime" ${T1wInputImages[0]%.nii*}.json`
+  T1wSampleSpacing=`read_header_param "DwellTime" ${firstT1w%.nii*}.json`
   printf -v T1wSampleSpacing "%.9f" "${T1wSampleSpacing}"    # convert from scientific to float notation
   #T1wSampleSpacing=`echo ${T1wSampleSpacing} | awk '{ print sprintf("%.9f", $1); }'`
 
   if [ ! $T2wInputImages = "NONE" ] ; then
-      T2wSampleSpacing=`read_header_param "DwellTime" ${T2wInputImages[0]%.nii*}.json`
+      T2wSampleSpacing=`read_header_param "DwellTime" ${firstT2w%.nii*}.json`
       printf -v T2wSampleSpacing "%.9f" "${T2wSampleSpacing}"    # convert from scientific to float notation
       #T2wSampleSpacing=`echo ${T2wSampleSpacing} | awk '{ print sprintf("%.9f", $1); }'`
   fi
