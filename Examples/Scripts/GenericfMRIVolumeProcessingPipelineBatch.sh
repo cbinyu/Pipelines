@@ -173,7 +173,7 @@ for Subject in ${Subjlist[*]} ; do
 	#Target final resolution of fMRI data. 2mm is recommended for 3T HCP data, 1.6mm for 7T HCP data (i.e. should match acquired resolution).  Use 2.0 or 1.0 to avoid standard FSL templates
 	#FinalFMRIResolution="2"
 	FinalFMRIResolution=`${FSLDIR}/bin/fslval ${fMRITimeSeries} pixdim1`
-	FinalFMRIResolution=`echo "scale=2; ${FinalFMRIResolution}/1" | bc -l` 
+	FinalFMRIResolution=`echo "scale=2; ${FinalFMRIResolution}/1" | bc -l | sed 's!\.0*$!!'`
 
 	##   Get the Phase Encoding direction from the json file:   ##
 	#UnwarpDir=`echo $PhaseEncodinglist | cut -d " " -f $i`
