@@ -14,7 +14,7 @@ read_header_param() {
    jsonFile="$2"
 
   myStr=\"$paramName\"
-  myTmp=`grep $myStr ${jsonFile}`
+  myTmp=`grep -m 1 $myStr ${jsonFile}`
   myTmp=${myTmp#*$myStr: }
   echo ${myTmp%,}
 
@@ -40,7 +40,7 @@ read_multiline_header_param() {
 
   myStr=\"$paramName\"
   # we know it's not going to take more than 100 lines: so grab 100
-  myTmp=`grep -A 100 $myStr ${jsonFile}`
+  myTmp=`grep -m 1 -A 100 $myStr ${jsonFile}`
   myTmp=${myTmp#*$myStr: [}
   echo ${myTmp%%"],"*}
 
