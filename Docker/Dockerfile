@@ -143,7 +143,7 @@ RUN yum -y update \
     && yum install -y centos-release-scl \
     && yum install -y python27 python-pip \     # you need to run this as a separte command from the above \
     && yum clean all
-RUN scl enable python27 'pip install numpy scipy nibabel'
+RUN scl enable python27 'pip install numpy==1.16.2 scipy==1.2.1 nibabel==2.3.3'
 
 # Install HCP's version of 'gradunwarp' (v.1.0.3) from github:
 ENV GRADUNWARP_VERSION=v1.1.0
