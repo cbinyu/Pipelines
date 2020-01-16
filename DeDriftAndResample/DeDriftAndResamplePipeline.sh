@@ -32,16 +32,13 @@
 #  Show usage information for this script
 # ------------------------------------------------------------------------------
 
-usage()
+show_usage()
 {
-	local script_name
-	script_name=$(basename "${0}")
-
 	cat <<EOF
 
-${script_name}: De-Drift and Resample"
+${g_script_name}: De-Drift and Resample"
 
-Usage: ${script_name} PARAMETER...
+Usage: ${g_script_name} PARAMETER...
 
 PARAMETERs are [ ] = optional; < > = user supplied value
 
@@ -49,7 +46,7 @@ PARAMETERs are [ ] = optional; < > = user supplied value
         form) by simply specifying all values on the command line in the order they are
         listed below.
 
-        E.g. ${script_name} /path/to/study/folder 100307 164 32@59 ... NONE NONE 1
+        E.g. ${g_script_name} /path/to/study/folder 100307 164 32@59 ... NONE NONE 1
 
         However, to use this technique, all optional parameters (e.g. myelin target file
         and input registration name) except the final one (the MATLAB run mode) must be 
@@ -62,29 +59,35 @@ PARAMETERs are [ ] = optional; < > = user supplied value
    --low-res-meshes=<meshnum@meshnum> String corresponding to low resolution meshes delimited by @, 
        (e.g. 32@59)
    --registration-name=<regname> String corresponding to the MSMAll or other registration sphere name 
-       (e.g. ${Subject}.${Hemisphere}.sphere.${RegName}.native.surf.gii)
-   --dedrift-reg-files=</Path/to/File/Left.sphere.surf.gii@/Path/to/File/Right.sphere.surf.gii> 
-       Path to the spheres output by the MSMRemoveGroupDrift pipeline or NONE
-   --concat-reg-name=<regname> String corresponding to the output name of the concatenated registration 
-       (i.e. the dedrifted registration)
-   --maps=<non@myelin@maps> @ delimited map name strings corresponding to maps that are not myelin maps 
-       (e.g. sulc curvature corrThickness thickness)
-   --myelin-maps=<myelin@maps> @ delimited map name strings corresponding to myelin maps 
-       (e.g. MyelinMap SmoothedMyelinMap) No _BC, this will be reapplied
-   --rfmri-names=<ICA+FIXed@fMRI@Names> @ delimited fMRIName strings corresponding to maps that will 
-       have ICA+FIX reapplied to them (could be either rfMRI or tfMRI). If none are to be used,
-       specify "NONE".
-   --tfmri-names=<not@ICA+FIXed@fMRI@Names> @ delimited fMRIName strings corresponding to maps that will
-       not have ICA+FIX reapplied to them (likely not to be used in the future as ICA+FIX will be 
-       recommended for all fMRI data) If none are to be used, specify "NONE".
+       (e.g. \${Subject}.\${Hemisphere}.sphere.\${RegName}.native.surf.gii)
+   [--dedrift-reg-files=</Path/to/File/Left.sphere.surf.gii@/Path/to/File/Right.sphere.surf.gii>]
+       Path to the spheres output by the MSMRemoveGroupDrift pipeline
+   [--concat-reg-name=<regname>] String corresponding to the output name of the dedrifted registration
+   --maps=<non@myelin@maps> @-delimited map name strings corresponding to maps that are not myelin maps 
+       (e.g. sulc@curvature@corrThickness@thickness)
+   [--myelin-maps=<myelin@maps>] @-delimited map name strings corresponding to myelin maps 
+       (e.g. MyelinMap@SmoothedMyelinMap). No _BC, this will be reapplied.
+   [--multirun-fix-names=<day1run1@day1run2%day2run1@day2run2>] @ and % delimited list of lists of
+       fMRIName strings that will have multi-run ICA+FIX reapplied to them (could be either rfMRI or
+       tfMRI). Requires specifying --multirun-fix-concat-names also, with same number of concat names as
+       lists of runs in this option.
+   [--multirun-fix-concat-names=<day1_concat@day2_concat>] @-delimited list of names of the concatenated
+       timeseries, only required when using --multirun-fix-names.
+   [--fix-names=<ICA+FIXed@fMRI@Names>] @-delimited fMRIName strings corresponding to maps that will 
+       have ICA+FIX reapplied to them (could be either rfMRI or tfMRI). Previously known as --rfmri-names.
+   [--dont-fix-names=<not@ICA+FIXed@fMRI@Names>] @-delimited fMRIName strings corresponding to maps that
+       will not have ICA+FIX reapplied to them (not recommended, ICA+FIX is recommended for all fMRI
+       data). Previously known as --tfmri-names.
    --smoothing-fwhm=<number> Smoothing FWHM that matches what was used in the fMRISurface pipeline
-   --highpass=<number> Highpass filter sigma that matches what was used in the ICA+FIX pipeline
+   --high-pass=<high-pass filter used in ICA+FIX>
+   --motion-regression={TRUE, FALSE} whether FIX should do motion regression
   [--myelin-target-file=<path/to/myelin/target/file>] A myelin target file is required to run this 
        pipeline when using a different mesh resolution than the original MSMAll registration.
   [--input-reg-name=<string>] A string to enable multiple fMRI resolutions (e.g._1.6mm)
-  [--matlab-run-mode={0, 1}] defaults to ${G_DEFAULT_MATLAB_RUN_MODE}
+  [--matlab-run-mode={0, 1, 2}] defaults to ${G_DEFAULT_MATLAB_RUN_MODE}
      0 = Use compiled MATLAB
      1 = Use interpreted MATLAB
+     2 = Use interpreted Octave
 
 EOF
 }
@@ -95,7 +98,7 @@ EOF
 
 get_options() 
 {
-	local arguments=($@)
+	local arguments=("$@")
 
 	# initialize global output variables
 	unset p_StudyFolder
@@ -103,14 +106,17 @@ get_options()
 	unset p_HighResMesh
 	unset p_LowResMeshes			# LowReshMeshes - @ delimited list, e.g. 32@59, multiple resolutions not currently supported for fMRI data
 	unset p_RegName
-	unset p_DeDriftRegFiles			# DeDriftRegFiles - @ delimited, L and R outputs from MSMRemoveGroupDrift.sh
+	p_DeDriftRegFiles=NONE			# DeDriftRegFiles - @ delimited, L and R outputs from MSMRemoveGroupDrift.sh
 	unset p_ConcatRegName
 	unset p_Maps					# @ delimited
-	unset p_MyelinMaps				# @ delimited
-	unset p_rfMRINames				# @ delimited
-	unset p_tfMRINames				# @ delimited
+	p_MyelinMaps=NONE				# @ delimited
+	p_mrFIXConcatNames=NONE			# @ delimited
+	p_mrFIXNames=NONE				# @ and % delimited, % is top-level and must match number of @s in ConcatNames
+	p_rfMRINames=NONE				# @ delimited
+	p_tfMRINames=NONE				# @ delimited
 	unset p_SmoothingFWHM
 	unset p_HighPass
+	unset p_MotionRegression
 
 	# set default values
 	p_MyelinTargetFile="NONE"
@@ -127,8 +133,8 @@ get_options()
 
 		case ${argument} in
 			--help)
-				usage
-				exit 1
+				show_usage
+				exit 0
 				;;
 			--path=*)
 				p_StudyFolder=${argument#*=}
@@ -170,11 +176,19 @@ get_options()
 				p_MyelinMaps=${argument#*=}
 				index=$(( index + 1 ))
 				;;
-			--rfmri-names=*)
+			--multirun-fix-concat-names=*)
+				p_mrFIXConcatNames=${argument#*=}
+				index=$(( index + 1 ))
+				;;
+			--multirun-fix-names=*)
+				p_mrFIXNames=${argument#*=}
+				index=$(( index + 1 ))
+				;;
+			--fix-names=* | --rfmri-names=*)
 				p_rfMRINames=${argument#*=}
 				index=$(( index + 1 ))
 				;;
-			--tfmri-names=*)
+			--dont-fix-names=* | --tfmri-names=*)
 				p_tfMRINames=${argument#*=}
 				index=$(( index + 1 ))
 				;;
@@ -182,7 +196,7 @@ get_options()
 				p_SmoothingFWHM=${argument#*=}
 				index=$(( index + 1 ))
 				;;
-			--highpass=*)
+			--high-pass=* | --highpass=*)
 				p_HighPass=${argument#*=}
 				index=$(( index + 1 ))
 				;;
@@ -198,8 +212,12 @@ get_options()
 				p_MatlabRunMode=${argument#*=}
 				index=$(( index + 1 ))
 				;;
+			--motion-regression=*)
+				p_MotionRegression=${argument#*=}
+				index=$(( index + 1 ))
+				;;
 			*)
-				usage
+				show_usage
 				log_Err_Abort "unrecognized option: ${argument}"
 				;;
 		esac
@@ -243,19 +261,12 @@ get_options()
 		log_Msg "Registration Name: ${p_RegName}"
 	fi
 	
-	if [ -z "${p_DeDriftRegFiles}" ]; then
-		log_Err "De-Drifting registration files (--dedrift-reg-files=) required"
-		error_count=$(( error_count + 1 ))
-	else
-		log_Msg "De-Drifting registration files: ${p_DeDriftRegFiles}"
-	fi
+	log_Msg "De-Drifting registration files: ${p_DeDriftRegFiles}"
 
 	if [ -z "${p_ConcatRegName}" ]; then
-		log_Err "concatenated registration name (--concat-reg-name=) required"
-		error_count=$(( error_count + 1 ))
-	else
-		log_Msg "concatenated registration name: ${p_ConcatRegName}"
+		p_ConcatRegName="${p_RegName}"
 	fi
+	log_Msg "concatenated registration name: ${p_ConcatRegName}"
 	
 	if [ -z "${p_Maps}" ]; then
 		log_Err "list of structural maps to be resampled (--maps=) required"
@@ -271,19 +282,9 @@ get_options()
 		log_Msg "list of Myelin maps to be resampled: ${p_MyelinMaps}"
 	fi
 
-	if [ -z "${p_rfMRINames}" ]; then
-		log_Err "list of resting state scans (--rfmri-names=) required"
-		error_count=$(( error_count + 1 ))
-	else
-		log_Msg "list of resting state scans: ${p_rfMRINames}"
-	fi
-	
-	if [ -z "${p_tfMRINames}" ]; then
-		log_Err "list of task scans (--tfmri-names=) required"
-		error_count=$(( error_count + 1 ))
-	else
-		log_Msg "list of task scans: ${p_tfMRINames}"
-	fi
+	log_Msg "list of MRfix scans: ${p_mrFIXNames}"
+	log_Msg "list of fix scans: ${p_rfMRINames}"
+	log_Msg "list of non-fix scans: ${p_tfMRINames}"
 
 	if [ -z "${p_SmoothingFWHM}" ]; then
 		log_Err "smoothing value (--smoothing-fwhm=) required"
@@ -293,10 +294,10 @@ get_options()
 	fi
 
 	if [ -z "${p_HighPass}" ]; then
-		log_Err "highpass value (--highpass=) required"
+		log_Err "HighPass value (--high-pass=) required"
 		error_count=$(( error_count + 1 ))
 	else
-		log_Msg "highpass value: ${p_HighPass}"
+		log_Msg "HighPass value: ${p_HighPass}"
 	fi
 
 	if [ -z "${p_MyelinTargetFile}" ]; then
@@ -329,13 +330,34 @@ get_options()
 			1)
 				log_Msg "MATLAB Run Mode: ${p_MatlabRunMode} - Use interpreted MATLAB"
 				;;
+			2)
+				log_Msg "MATLAB Run Mode: ${p_MatlabRunMode} - Use interpreted octave"
+				;;
 			*)
-				log_Err "MATLAB Run Mode value must be 0 or 1"
+				log_Err "MATLAB Run Mode value must be 0, 1, or 2"
 				error_count=$(( error_count + 1 ))
 				;;
 		esac
 	fi
 
+	if [ -z "${p_MotionRegression}" ]; then
+		log_Err "motion correction setting (--motion-regression=) required"
+		error_count=$(( error_count + 1 ))
+	else
+		case $(echo ${p_MotionRegression} | tr '[:upper:]' '[:lower:]') in
+            ( true | yes | 1)
+                p_MotionRegression=1
+                ;;
+            ( false | no | none | 0)
+                p_MotionRegression=0
+                ;;
+			*)
+				log_Err "motion correction setting must be TRUE or FALSE"
+				error_count=$(( error_count + 1 ))
+				;;
+		esac
+	fi
+	
 	if [ ${error_count} -gt 0 ]; then
 		log_Err_Abort "For usage information, use --help"
 	fi
@@ -376,24 +398,27 @@ main()
 	local MyelinMaps="${9}"
 	local rfMRINames="${10}"
 	local tfMRINames="${11}"
-	local SmoothingFWHM="${12}"
-	local HighPass="${13}"
+	local mrFIXNames="${12}"
+	local mrFIXConcatNames="${13}"
+	local SmoothingFWHM="${14}"
+	local HighPass="${15}"
+	local MotionRegression="${16}"
 	
-	local MyelinTargetFile="${14}"
+	local MyelinTargetFile="${17}"
 	if [ "${MyelinTargetFile}" = "NONE" ]; then
 		MyelinTargetFile=""
 	fi
 
-	local InRegName="${15}"
+	local InRegName="${18}"
 	if [ "${InRegName}" = "NONE" ]; then
 		InRegName=""
 	fi
 	
 	local MatlabRunMode
-	if [ -z "${16}" ]; then
+	if [ -z "${19}" ]; then
 		MatlabRunMode=${G_DEFAULT_MATLAB_RUN_MODE}
 	else
-		MatlabRunMode="${16}"
+		MatlabRunMode="${19}"
 	fi
 
 	# Log values retrieved from positional parameters
@@ -406,6 +431,8 @@ main()
 	log_Msg "ConcatRegName: ${ConcatRegName}"
 	log_Msg "Maps: ${Maps}"
 	log_Msg "MyelinMaps: ${MyelinMaps}"
+	log_Msg "mrFIXNames: ${mrFIXNames}"
+	log_Msg "mrFIXConcatNames: ${mrFIXConcatNames}"
 	log_Msg "rfMRINames: ${rfMRINames}"
 	log_Msg "tfMRINames: ${tfMRINames}"
 	log_Msg "SmoothingFWHM: ${SmoothingFWHM}"
@@ -427,21 +454,53 @@ main()
 	Maps=`echo "$Maps" | sed s/"@"/" "/g`
 	log_Msg "After delimiter substitution, Maps: ${Maps}"
 
-	MyelinMaps=`echo "$MyelinMaps" | sed s/"@"/" "/g`
+    if [[ "${MyelinMaps}" == "NONE" ]]
+    then
+        MyelinMaps=""
+    else
+    	MyelinMaps=`echo "$MyelinMaps" | sed s/"@"/" "/g`
+	fi
 	log_Msg "After delimiter substitution, MyelinMaps: ${MyelinMaps}"
 
-	rfMRINames=`echo "$rfMRINames" | sed s/"@"/" "/g`
 	if [ "${rfMRINames}" = "NONE" ] ; then
-		rfMRINames=""
+		rfMRINames=()
+	else
+		#rfMRINames=`echo "$rfMRINames" | sed s/"@"/" "/g`
+		IFS=@ read -a rfMRINames <<< "${rfMRINames}"
 	fi
-	log_Msg "After delimiter substitution, rfMRINames: ${rfMRINames}"
+	log_Msg "After delimiter substitution, rfMRINames: ${rfMRINames[@]}"
 
-	tfMRINames=`echo "$tfMRINames" | sed s/"@"/" "/g`
 	if [ "${tfMRINames}" = "NONE" ] ; then
-		tfMRINames=""
+		tfMRINames=()
+	else
+		#tfMRINames=`echo "$tfMRINames" | sed s/"@"/" "/g`
+		IFS=@ read -a tfMRINames <<< "${tfMRINames}"
 	fi
-	log_Msg "After delimiter substitution, tfMRINames: ${tfMRINames}"
+	log_Msg "After delimiter substitution, tfMRINames: ${tfMRINames[@]}"
 
+	if [[ "${mrFIXNames}" == "NONE" ]] ; then
+		mrFIXNames=()
+	else
+		#need a flat list of all the names in order to resample - do this before we destroy the original value of the variable
+		IFS=@% read -a mrFIXNamesAll <<< "${mrFIXNames}"
+		#two-level list, % and @, parse only one stage here
+		IFS=% read -a mrFIXNames <<< "${mrFIXNames}"
+	fi
+	log_Msg "After delimiter substitution, mrFIXNames: ${mrFIXNames[@]}"
+	
+	if [[ "$mrFIXConcatNames" == "NONE" ]]
+	then
+		mrFIXConcatNames=()
+	else
+		IFS=@ read -a mrFIXConcatNames <<< "$mrFIXConcatNames"
+	fi
+	log_Msg "After delimiter substitution, mrFIXConcatNames: ${mrFIXConcatNames[@]}"
+	
+	if (( ${#mrFIXNames[@]} != ${#mrFIXConcatNames[@]} ))
+	then
+		log_Err_Abort "number of MR FIX concat names and run groups are different"
+	fi
+	
 	CorrectionSigma=$(echo "sqrt ( 200 )" | bc -l)
 	log_Msg "CorrectionSigma: ${CorrectionSigma}"
 
@@ -496,7 +555,14 @@ main()
 		${Caret7_Command} -metric-math "ln(spherereg / sphere) / ln(2)" ${NativeFolder}/${Subject}.${Hemisphere}.ArealDistortion_${ConcatRegName}.native.shape.gii -var sphere ${NativeFolder}/${Subject}.${Hemisphere}.sphere.native.shape.gii -var spherereg ${NativeFolder}/${Subject}.${Hemisphere}.sphere.${ConcatRegName}.native.shape.gii
 		rm ${NativeFolder}/${Subject}.${Hemisphere}.sphere.native.shape.gii ${NativeFolder}/${Subject}.${Hemisphere}.sphere.${ConcatRegName}.native.shape.gii
 
-		${Caret7_Command} -surface-distortion ${NativeFolder}/${Subject}.${Hemisphere}.sphere.native.surf.gii ${NativeFolder}/${Subject}.${Hemisphere}.sphere.${ConcatRegName}.native.surf.gii ${NativeFolder}/${Subject}.${Hemisphere}.EdgeDistortion_${ConcatRegName}.native.shape.gii -edge-method 
+		${Caret7_Command} -surface-distortion ${NativeFolder}/${Subject}.${Hemisphere}.sphere.native.surf.gii ${NativeFolder}/${Subject}.${Hemisphere}.sphere.${ConcatRegName}.native.surf.gii ${NativeFolder}/${Subject}.${Hemisphere}.EdgeDistortion_${ConcatRegName}.native.shape.gii -edge-method
+		
+		${Caret7_Command} -surface-distortion "${NativeFolder}"/"${Subject}"."${Hemisphere}".sphere.native.surf.gii "${NativeFolder}"/"${Subject}"."${Hemisphere}".sphere.${ConcatRegName}.native.surf.gii "${NativeFolder}"/"$Subject"."$Hemisphere".Strain_${ConcatRegName}.native.shape.gii -local-affine-method
+	    ${Caret7_Command} -metric-merge "${NativeFolder}"/"$Subject"."$Hemisphere".StrainJ_${ConcatRegName}.native.shape.gii -metric "${NativeFolder}"/"$Subject"."$Hemisphere".Strain_${ConcatRegName}.native.shape.gii -column 1
+	    ${Caret7_Command} -metric-merge "${NativeFolder}"/"$Subject"."$Hemisphere".StrainR_${ConcatRegName}.native.shape.gii -metric "${NativeFolder}"/"$Subject"."$Hemisphere".Strain_${ConcatRegName}.native.shape.gii -column 2
+	    ${Caret7_Command} -metric-math "ln(var) / ln (2)" "${NativeFolder}"/"$Subject"."$Hemisphere".StrainJ_${ConcatRegName}.native.shape.gii -var var "${NativeFolder}"/"$Subject"."$Hemisphere".StrainJ_${ConcatRegName}.native.shape.gii
+	    ${Caret7_Command} -metric-math "ln(var) / ln (2)" "${NativeFolder}"/"$Subject"."$Hemisphere".StrainR_${ConcatRegName}.native.shape.gii -var var "${NativeFolder}"/"$Subject"."$Hemisphere".StrainR_${ConcatRegName}.native.shape.gii
+	    rm "${NativeFolder}"/"$Subject"."$Hemisphere".Strain_${ConcatRegName}.native.shape.gii
 	done
 
 	${Caret7_Command} -cifti-create-dense-timeseries ${NativeFolder}/${Subject}.ArealDistortion_${ConcatRegName}.native.dtseries.nii -left-metric ${NativeFolder}/${Subject}.L.ArealDistortion_${ConcatRegName}.native.shape.gii -roi-left ${NativeFolder}/${Subject}.L.atlasroi.native.shape.gii -right-metric ${NativeFolder}/${Subject}.R.ArealDistortion_${ConcatRegName}.native.shape.gii -roi-right ${NativeFolder}/${Subject}.R.atlasroi.native.shape.gii
@@ -510,6 +576,18 @@ main()
 	${Caret7_Command} -set-map-name ${NativeFolder}/${Subject}.EdgeDistortion_${ConcatRegName}.native.dscalar.nii 1 ${Subject}_EdgeDistortion_${ConcatRegName}
 	${Caret7_Command} -cifti-palette ${NativeFolder}/${Subject}.EdgeDistortion_${ConcatRegName}.native.dscalar.nii MODE_USER_SCALE ${NativeFolder}/${Subject}.EdgeDistortion_${ConcatRegName}.native.dscalar.nii -pos-user 0 1 -neg-user 0 -1 -interpolate true -palette-name ROY-BIG-BL -disp-pos true -disp-neg true -disp-zero false
 	rm ${NativeFolder}/${Subject}.EdgeDistortion_${ConcatRegName}.native.dtseries.nii 
+
+	${Caret7_Command} -cifti-create-dense-timeseries ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dtseries.nii -left-metric ${NativeFolder}/${Subject}.L.StrainJ_${ConcatRegName}.native.shape.gii -roi-left ${NativeFolder}/${Subject}.L.atlasroi.native.shape.gii -right-metric ${NativeFolder}/${Subject}.R.StrainJ_${ConcatRegName}.native.shape.gii -roi-right ${NativeFolder}/${Subject}.R.atlasroi.native.shape.gii
+	${Caret7_Command} -cifti-convert-to-scalar ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dtseries.nii ROW ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dscalar.nii
+	${Caret7_Command} -set-map-name ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dscalar.nii 1 ${Subject}_StrainJ_${ConcatRegName}
+	${Caret7_Command} -cifti-palette ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dscalar.nii MODE_USER_SCALE ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dscalar.nii -pos-user 0 1 -neg-user 0 -1 -interpolate true -palette-name ROY-BIG-BL -disp-pos true -disp-neg true -disp-zero false
+	rm ${NativeFolder}/${Subject}.StrainJ_${ConcatRegName}.native.dtseries.nii
+	
+	${Caret7_Command} -cifti-create-dense-timeseries ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dtseries.nii -left-metric ${NativeFolder}/${Subject}.L.StrainR_${ConcatRegName}.native.shape.gii -roi-left ${NativeFolder}/${Subject}.L.atlasroi.native.shape.gii -right-metric ${NativeFolder}/${Subject}.R.StrainR_${ConcatRegName}.native.shape.gii -roi-right ${NativeFolder}/${Subject}.R.atlasroi.native.shape.gii
+	${Caret7_Command} -cifti-convert-to-scalar ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dtseries.nii ROW ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dscalar.nii
+	${Caret7_Command} -set-map-name ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dscalar.nii 1 ${Subject}_StrainR_${ConcatRegName}
+	${Caret7_Command} -cifti-palette ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dscalar.nii MODE_USER_SCALE ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dscalar.nii -pos-user 0 1 -neg-user 0 -1 -interpolate true -palette-name ROY-BIG-BL -disp-pos true -disp-neg true -disp-zero false
+	rm ${NativeFolder}/${Subject}.StrainR_${ConcatRegName}.native.dtseries.nii
 
 	DownSampleFolder=`echo ${DownSampleFolderNames} | cut -d " " -f 1`
 	log_Msg "DownSampleFolder: ${DownSampleFolder}"
@@ -626,7 +704,7 @@ main()
 		# Resample scalar maps and apply new bias field
 		log_Msg "Resample scalar maps and apply new bias field"
 
-		for Map in ${Maps} ${MyelinMaps} SphericalDistortion ArealDistortion EdgeDistortion ; do
+		for Map in ${Maps} ${MyelinMaps} SphericalDistortion ArealDistortion EdgeDistortion StrainJ StrainR ; do
 			log_Msg "Map: ${Map}"
 
 			for MapMap in ${MyelinMaps} ; do
@@ -677,11 +755,11 @@ main()
 
 					log_Debug_Msg "Point 1.2"
 
-					if [ ! -e ${DownSampleFolder}/${Subject}.atlas_MyelinMap_BC.${LowResMesh}k_fs_LR.dscalar.nii ] ; then
-						if [ -n ${MyelinTargetFile} ] ; then
-							cp --verbose ${MyelinTargetFile} ${DownSampleFolder}/${Subject}.atlas_MyelinMap_BC.${LowResMesh}k_fs_LR.dscalar.nii
+					if [[ ! -e ${DownSampleFolder}/${Subject}.atlas_MyelinMap_BC.${LowResMesh}k_fs_LR.dscalar.nii ]] ; then
+						if [[ ! -z ${MyelinTargetFile} ]] ; then
+							cp ${MyelinTargetFile} ${DownSampleFolder}/${Subject}.atlas_MyelinMap_BC.${LowResMesh}k_fs_LR.dscalar.nii
 						else
-							log_Err_Abort "A ${MyelinTargetFile} is required to run this pipeline when using a different mesh resolution than the original MSMAll registration"
+							log_Err_Abort "A --myelin-target-file is required to run this pipeline when using a different mesh resolution than the original MSMAll registration"
 						fi
 					fi
 
@@ -700,7 +778,7 @@ main()
 
 			log_Debug_Msg "Point 2.0"
 
-			if [[ ${Map} = "ArealDistortion" || ${Map} = "EdgeDistortion" || ${Map} = "MyelinMap_BC" || ${Map} = "SmoothedMyelinMap_BC" ]] ; then
+			if [[ ${Map} = "ArealDistortion" || ${Map} = "EdgeDistortion" || ${Map} = "StrainJ" || ${Map} = "StrainR" || ${Map} = "MyelinMap_BC" || ${Map} = "SmoothedMyelinMap_BC" ]] ; then
 				NativeMap="${Map}_${ConcatRegName}"
 			else
 				NativeMap="${Map}"
@@ -749,7 +827,7 @@ main()
 
 	# Resample (and resmooth) TS from Native 
 	log_Msg "Resample (and resmooth) TS from Native"
-	for fMRIName in ${rfMRINames} ${tfMRINames} ; do
+	for fMRIName in "${rfMRINames[@]}" "${tfMRINames[@]}" "${mrFIXNamesAll[@]}" ; do
 		log_Msg "fMRIName: ${fMRIName}"
 		cp ${ResultsFolder}/${fMRIName}/${fMRIName}_Atlas${InRegName}.dtseries.nii ${ResultsFolder}/${fMRIName}/${fMRIName}_Atlas_${ConcatRegName}.dtseries.nii
 		for Hemisphere in L R ; do
@@ -773,14 +851,27 @@ main()
 
 	# ReApply FIX Cleanup
 	log_Msg "ReApply FIX Cleanup"
-	log_Msg "rfMRINames: ${rfMRINames}"
-	for fMRIName in ${rfMRINames} ; do
+	log_Msg "rfMRINames: ${rfMRINames[@]}"
+	for fMRIName in "${rfMRINames[@]}" ; do
 		log_Msg "fMRIName: ${fMRIName}"
-		reapply_fix_cmd="${HCPPIPEDIR}/ReApplyFix/ReApplyFixPipeline.sh --path=${StudyFolder} --subject=${Subject} --fmri-name=${fMRIName} --high-pass=${HighPass} --reg-name=${ConcatRegName} --matlab-run-mode=${MatlabRunMode}"
-		log_Msg "reapply_fix_cmd: ${reapply_fix_cmd}"
-		${reapply_fix_cmd}
+		reapply_fix_cmd=("${HCPPIPEDIR}/ICAFIX/ReApplyFixPipeline.sh" --path="${StudyFolder}" --subject="${Subject}" --fmri-name="${fMRIName}" --high-pass="${HighPass}" --reg-name="${ConcatRegName}" --matlab-run-mode="${MatlabRunMode}" --motion-regression="${MotionRegression}")
+		log_Msg "reapply_fix_cmd: ${reapply_fix_cmd[*]}"
+		"${reapply_fix_cmd[@]}"
 	done
 	
+	# reapply multirun fix
+	
+	for (( i = 0; i < ${#mrFIXConcatNames[@]}; ++i ))
+	do
+	    log_Msg "ReApply MultiRun FIX Cleanup"
+	    log_Msg "mrFIXNames: ${mrFIXNames[$i]}"
+	    log_Msg "mrFIXConcatNames: ${mrFIXConcatNames[$i]}"
+	    #stage 2 parsing is done by reapply script
+	    reapply_mr_fix_cmd=("${HCPPIPEDIR}/ICAFIX/ReApplyFixMultiRunPipeline.sh" --path="${StudyFolder}" --subject="${Subject}" --fmri-names="${mrFIXNames[$i]}" --concat-fmri-name="${mrFIXConcatNames[$i]}" --high-pass="${HighPass}" --reg-name="${ConcatRegName}" --matlab-run-mode="${MatlabRunMode}" --motion-regression="${MotionRegression}")
+	    log_Msg "reapply_mr_fix_cmd: ${reapply_mr_fix_cmd[*]}"
+	    "${reapply_mr_fix_cmd[@]}"
+    done
+
 	log_Msg "Completing main functionality"
 }
 
@@ -788,29 +879,47 @@ main()
 #  "Global" processing - everything above here should be in a function
 # ------------------------------------------------------------------------------
 
-set -e # If any commands exit with non-zero value, this script exits
+# Establish defaults
+G_DEFAULT_MATLAB_RUN_MODE=1		# Use interpreted MATLAB
+
+# Set global variables
+g_script_name=$(basename "${0}")
+
+# Allow script to return a Usage statement, before any other output
+if [ "$#" = "0" ]; then
+    show_usage
+    exit 1
+fi
 
 # Verify HCPPIPEDIR environment variable is set
 if [ -z "${HCPPIPEDIR}" ]; then
-	echo "$(basename ${0}): ABORTING: HCPPIPEDIR environment variable must be set"
+	echo "${g_script_name}: ABORTING: HCPPIPEDIR environment variable must be set"
 	exit 1
 fi
 
 # Load function libraries
-source "${HCPPIPEDIR}/global/scripts/log.shlib" # Logging related functions
-log_Msg "HCPPIPEDIR: ${HCPPIPEDIR}"
+source "${HCPPIPEDIR}/global/scripts/debug.shlib" "$@"         # Debugging functions; also sources log.shlib
+source ${HCPPIPEDIR}/global/scripts/opts.shlib                 # Command line option functions
+
+opts_ShowVersionIfRequested $@
+
+if opts_CheckForHelpRequest $@; then
+	show_usage
+	exit 0
+fi
+
+${HCPPIPEDIR}/show_version
+
 log_Debug_On
 
-# Verify any other needed environment variables are set
+# Verify required environment variables are set and log value
+log_Check_Env_Var HCPPIPEDIR
 log_Check_Env_Var CARET7DIR
 
 # Show tool versions
 show_tool_versions
 
-# Establish default MATLAB run mode
-G_DEFAULT_MATLAB_RUN_MODE=1		# Use interpreted MATLAB
-
-# Determine whether named or positional parameters are used
+# Determine whether named or positional parameters are used and invoke the 'main' function
 if [[ ${1} == --* ]]; then
 	# Named parameters (e.g. --parameter-name=parameter-value) are used
 	log_Msg "Using named parameters"
@@ -819,8 +928,8 @@ if [[ ${1} == --* ]]; then
 	get_options "$@"
 
 	# Invoke main functionality use positional parameters
-	#     ${1}               ${2}           ${3}               ${4}                ${5}           ${6}                   ${7}                 ${8}        ${9}              ${10}             ${11}             ${12}                ${13}           ${14}                   ${15}            ${16}
-	main "${p_StudyFolder}" "${p_Subject}" "${p_HighResMesh}" "${p_LowResMeshes}" "${p_RegName}" "${p_DeDriftRegFiles}" "${p_ConcatRegName}" "${p_Maps}" "${p_MyelinMaps}" "${p_rfMRINames}" "${p_tfMRINames}" "${p_SmoothingFWHM}" "${p_HighPass}" "${p_MyelinTargetFile}" "${p_InRegName}" "${p_MatlabRunMode}"
+	#     ${1}               ${2}           ${3}               ${4}                ${5}           ${6}                   ${7}                 ${8}        ${9}              ${10}             ${11}             ${12}             ${13}                  ${14}                ${15}           ${16}                   ${17}                   ${18}            ${19}
+	main "${p_StudyFolder}" "${p_Subject}" "${p_HighResMesh}" "${p_LowResMeshes}" "${p_RegName}" "${p_DeDriftRegFiles}" "${p_ConcatRegName}" "${p_Maps}" "${p_MyelinMaps}" "${p_rfMRINames}" "${p_tfMRINames}" "${p_mrFIXNames}" "${p_mrFIXConcatNames}" "${p_SmoothingFWHM}" "${p_HighPass}" "${p_MotionRegression}" "${p_MyelinTargetFile}" "${p_InRegName}" "${p_MatlabRunMode}"
 	
 else
 	# Positional parameters are used

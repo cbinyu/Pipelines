@@ -6,7 +6,7 @@
 # 
 # ## Copyright Notice
 #
-# Copyright (C) 2012-2016 The Human Connectome Project
+# Copyright (C) 2012-2019 The Human Connectome Project
 # 
 # * Washington University in St. Louis
 # * University of Minnesota
@@ -35,7 +35,7 @@
 # 
 # ## Prerequisite Installed Software
 # 
-# * [FSL][FSL] - FMRIB's Software Library (version 5.0.6)
+# * [FSL][FSL] - FMRIB's Software Library (version 5.0.7 or later)
 # 
 #   FSL's environment setup script must also be sourced
 # 
@@ -50,84 +50,89 @@
 # 
 #~ND~END~
 
-# Load Function Libraries
-source ${HCPPIPEDIR}/global/scripts/log.shlib # log_ functions
 
-#
-# Function Description:
-#  Show usage information for this script
-#
-usage()
+# Load Function Libraries
+source "${HCPPIPEDIR}/global/scripts/debug.shlib" "$@" # Debugging functions; also sources log.shlib
+
+
+# --------------------------------------------------------------------------------
+#  Usage Description Function
+# --------------------------------------------------------------------------------
+
+show_usage()
 {
-	local scriptName=$(basename ${0})
-	echo ""
-	echo "  Usage: ${scriptName} <options>"
-	echo ""
-	echo "  Options: [ ] = optional; < > = user supplied value"
-	echo ""
-	echo "    [-h | --help] : show usage information and exit with non-zero return code"
-	echo ""
-	echo "    [-g | --gpu]  : use the GPU-enabled version of eddy."
-	echo ""
-	echo "    [--wss] : produce detailed outlier statistics after each iteration by using "
-	echo "              the --wss option to a call to eddy.  Note that this option has "
-	echo "              no effect unless the GPU-enabled version of eddy is used."
-	echo ""
-	echo "    [--repol] : replace outliers. Note that this option has no effect unless the"
-	echo "                GPU-enabled version of eddy is used."
-	echo ""
-	echo "    [--nvoxhp=<number-of-voxel-hyperparameters>] : number of voxel hyperparameters to use"
-	echo "                Note that this option has no effect unless the GPU-enabled version of"
-	echo "                eddy is used."
-	echo ""
-	echo "    [--sep_offs_move] : If specified, this option stops dwi from drifting relative to b=0"
-	echo "                Note that this option has no effect unless the GPU-enabled version of"
-	echo "                eddy is used."
-	echo ""
-	echo "    [--rms] : If specified, write a root-mean-squared movement file for QA purposes"
-	echo "                Note that this option has no effect unless the GPU-enabled version of"
-	echo "                eddy is used."
-	echo ""
-	echo "    [--ff=<ff-value>] : TBW??"
-	echo "                Note that this option has no effect unless the GPU-enabled version of"
-	echo "                eddy is used."
-	echo ""
-	echo "    -w <working-dir>           | "
-	echo "    -w=<working-dir>           | "
-	echo "    --workingdir <working-dir> | "
-	echo "    --workingdir=<working-dir> : the working directory (REQUIRED)"
-	echo ""
-	echo "    [--dont_peas] : pass the --dont_peas (Do NOT perform a post-eddy alignment of shells) option"
-	echo "                    to eddy invocation"
-	echo ""
-	echo "    [--fwhm=<value>] : --fwhm value to pass to eddy"
-	echo "                       If unspecified, defaults to --fwhm=0"
-	echo ""
-	echo "    [--resamp=<value>] : --resamp value to pass to eddy"
-	echo "                         If unspecified, no --resamp option is passed to eddy"
-	echo ""
-	echo "    [--ol_nstd=<value>] : --ol_nstd value to pass to eddy"
-	echo "                          If unspecified, no --ol_nstd option is pssed to eddy"
-	echo ""
-	echo "    [--extra-eddy-arg=token] : Generic single token (no whitespace) argument to pass"
-	echo "                               to the eddy binary. To build a multi-token series of"
-	echo "                               arguments, you can specify this --extra-eddy-arg= "
-	echo "                               parameter serveral times. E.g."
-	echo "                               --extra-eddy-arg=--verbose --extra-eddy-arg=T"
-	echo "                               will ultimately be translated to --verbose T when"
-	echo "                               passed to the eddy binary"
-	echo ""
-	echo "  Return code:"
-	echo ""
-	echo "    0 if help was not requested, all parameters were properly formed, and processing succeeded"
-	echo "    Non-zero otherwise - malformed parameters, help requested or processing failure was detected"
-	echo ""
-	echo "  Required Environment Variables:"
-	echo ""
-	echo "    FSLDIR"
-	echo ""
-	echo "      The home directory for FSL"
-	echo ""
+	cat <<EOF
+
+Usage: ${g_script_name} PARAMETER...
+
+PARAMETERS are: [ ] = optional; < > = user supplied value
+
+  -w <working-dir> OR
+  -w=<working-dir> OR
+  --workingdir <working-dir> OR
+  --workingdir=<working-dir> : the working directory (REQUIRED)
+
+  [-h | --help] : show usage information and exit with non-zero return code
+
+  [-g | --gpu]  : use the GPU-enabled version of eddy.
+
+  [--wss] : produce detailed outlier statistics after each iteration by using
+            the --wss option to a call to eddy.  Note that this option has
+            no effect unless the GPU-enabled version of eddy is used.
+
+  [--repol] : replace outliers. Note that this option has no effect unless the
+              GPU-enabled version of eddy is used.
+
+  [--nvoxhp=<number-of-voxel-hyperparameters>] : number of voxel hyperparameters to use
+              Note that this option has no effect unless the GPU-enabled version of
+              eddy is used.
+
+  [--sep_offs_move] : If specified, this option stops dwi from drifting relative to b=0
+              Note that this option has no effect unless the GPU-enabled version of
+              eddy is used.
+
+  [--rms] : If specified, write a root-mean-squared movement file for QA purposes
+              Note that this option has no effect unless the GPU-enabled version of
+              eddy is used.
+
+  [--ff=<ff-value>] : Determines level of Q-space smoothing during esimation of movement/distortions
+
+  [--dont_peas] : pass the --dont_peas (Do NOT perform a post-eddy alignment of shells) option
+                  to eddy invocation"
+
+  [--fwhm=<value>] : --fwhm value to pass to eddy
+                     If unspecified, defaults to --fwhm=0
+
+  [--resamp=<value>] : --resamp value to pass to eddy
+                     If unspecified, no --resamp option is passed to eddy
+
+  [--ol_nstd=<value>] : --ol_nstd value to pass to eddy
+                     If unspecified, no --ol_nstd option is pssed to eddy
+
+  [--extra-eddy-arg=token] : Generic single token (no whitespace) argument to pass
+                             to the eddy binary. To build a multi-token series of
+                             arguments, you can specify this --extra-eddy-arg= 
+                             parameter several times. E.g.,
+                                --extra-eddy-arg=--verbose --extra-eddy-arg=T
+                                will ultimately be translated to --verbose T when
+                                passed to the eddy binary
+  [--cuda-version=X.Y] : X.Y are the CUDA version of the eddy binary to use
+                         This command line argument is required if -g or --gpu is
+                         specified and the FSL installation used is not configured
+                         with a file FSLDIR/bin/eddy as a symbolic link to the
+                         appropriate FSLDIR/bin/eddy_cudaX.Y binary file.
+
+Return Status Value:
+
+  0                       All parameters were properly formed and processing succeeded,
+                          or help requested.
+  Non-zero                otherwise - malformed parameters or a processing failure was detected
+
+Required Environment Variables:
+
+  FSLDIR                  The home directory for FSL
+
+EOF
 }
 
 #
@@ -146,13 +151,18 @@ usage()
 #  ${nvoxhp}          - User specified number of voxel hyperparameters (empty string if unspecified)
 #  ${sep_offs_move}   - Set to "True" if user has specified the --sep_offs_move command line option
 #  ${rms}             - Set to "True" if user has specified the --rms command line option
-#  ${ff_val}          - User specified ff value (what is ff?) (empty string if unspecified)
+#  ${ff_val}          - User specified ff value (empty string if unspecified)
 #  ${ol_nstd_val}     - User specified value for ol_nstd option
 #  ${extra_eddy_args} - User specified value for the --extra-eddy-args command line option
+#  ${g_cuda_version}  - User specified value for the --cuda-version command line option
 #
+
+# --------------------------------------------------------------------------------
+#  Support Functions
+# --------------------------------------------------------------------------------
+
 get_options()
 {
-	local scriptName=$(basename ${0})
 	local arguments=($@)
 	
 	# global output variables
@@ -169,7 +179,8 @@ get_options()
 	resamp_value=""
 	unset ol_nstd_val
 	extra_eddy_args=""
-
+	g_cuda_version=""
+	
 	# parse arguments
 	local index=0
 	local numArgs=${#arguments[@]}
@@ -181,8 +192,8 @@ get_options()
 		
 		case ${argument} in
 			-h | --help)
-				usage
-				exit 1
+				show_usage
+				exit 0
 				;;
 			-g | --gpu)
 				useGpuVersion="True"
@@ -241,9 +252,13 @@ get_options()
 				extra_eddy_args+=" ${extra_eddy_arg} "
 				index=$(( index + 1 ))
 				;;
+			--cuda-version=*)
+				g_cuda_version=${argument#*=}
+				index=$(( index + 1 ))
+				;;
 			*)
-				echo "Unrecognized Option: ${argument}"
-				usage
+				show_usage
+				echo "ERROR: Unrecognized Option: ${argument}"
 				exit 1
 				;;
 		esac
@@ -251,13 +266,13 @@ get_options()
 	
 	# check required parameters
 	if [ -z ${workingdir} ]; then
-		usage
+		show_usage
 		echo "  Error: <working-dir> not specified - Exiting without running eddy"
 		exit 1
 	fi
 	
 	# report options
-	echo "-- ${scriptName}: Specified Command-Line Options - Start --"
+	echo "-- ${g_script_name}: Specified Command-Line Options - Start --"
 	echo "   workingdir: ${workingdir}"
 	echo "   useGpuVersion: ${useGpuVersion}"
 	echo "   produceDetailedOutlierStats: ${produceDetailedOutlierStats}"
@@ -271,103 +286,184 @@ get_options()
 	echo "   resamp_value: ${resamp_value}"
 	echo "   ol_nstd_val: ${ol_nstd_val}"
 	echo "   extra_eddy_args: ${extra_eddy_args}"
-	echo "-- ${scriptName}: Specified Command-Line Options - End --"
+	echo "   g_cuda_version: ${g_cuda_version}"
+	echo "-- ${g_script_name}: Specified Command-Line Options - End --"
 }
 
 #
-# Function Description
-#  Validate necessary environment variables
+# Determine g_stdEddy and g_gpuEnabledEddy for a supported
+# "6-series" version of FSL (e.g. 6.0.1, 6.0.2, ... 7.x.x ...)
+# But not 6.0.0 which is unsupported.
 #
-validate_environment_vars()
+# This assumes that the version of FSL in use is already determined
+# to be a supported "6-series" version.
+#
+# Outputs:
+#   g_stdEddy
+#   g_gpuEnabledEddy
+#
+determine_eddy_tools_for_supported_six_series()
 {
-	local scriptName=$(basename ${0})
-	
-	# validate
-	if [ -z ${FSLDIR} ]; then
-		usage
-		echo "ERROR: FSLDIR environment variable not set"
-		exit 1
+	g_stdEddy="${FSLDIR}/bin/eddy_openmp"
+
+	if [ "${useGpuVersion}" = "True" ]; then
+		if [ ! -z "${g_cuda_version}" ]; then
+			# The user has asked to use the GPU-enabled version and
+			# explicitly specified the CUDA version to use (via
+			# the --cuda-version= option). So set things up to
+			# use that version of eddy.
+			g_gpuEnabledEddy="${FSLDIR}/bin/eddy_cuda${g_cuda_version}"
+		else
+			# The user has asked to use the GPU-enabled version but
+			# has not explicitly specified the CUDA version to use.
+			# So they need to have used the FSL recommended approach
+			# of having ${FSLDIR}/bin/eddy as a symbolic link to
+			# the appropriate eddy to run (e.g. eddy -> eddy_cuda8.0,
+			# or eddy -> eddy_cuda9.1) or having ${FSLDIR}/bin/eddy_cuda
+			# as a symbolic link to the appropriate eddy to run.
+			if [ -e ${FSLDIR}/bin/eddy ]; then
+				# They have an ${FSLDIR}/bin/eddy. So use it.
+				g_gpuEnabledEddy="${FSLDIR}/bin/eddy"
+			elif [ -e ${FSLDIR}/bin/eddy_cuda ]; then
+				# They have an ${FSLDIR}/bin/eddy_cuda. So use it. 
+				g_gpuEnabledEddy="${FSLDIR}/bin/eddy_cuda"
+			else
+				# If they have neither an FSLDIR/bin/eddy or FSLDIR/bin/eddy_cuda,
+				# tell them that we can't figure out what eddy to use.
+				log_Err "Since you have requested the use of GPU-enabled eddy,"
+				log_Err "you must either have:"
+				log_Err "1. ${FSLDIR}/bin/eddy as a symbolic link to the version of"
+				log_Err "   eddy_cudaX.Y in ${FSLDIR}/bin that you want to use"
+				log_Err "   and is appropriate for the CUDA libraries installed"
+				log_Err "   on your system OR "
+				log_Err "2. ${FSLDIR}/bin/eddy_cuda as a symbolic link to the version"
+				log_Err "   of eddy_cudaX.Y in ${FSLDIR}/bin that you want to use OR"
+				log_Err "3. You must specify the --cuda-version=X.Y option to this "
+				log_Err "   script in order to explicitly force the use of "
+				log_Err "   ${FSLDIR}/bin/eddy_cudaX.Y"
+				log_Err_Abort ""
+			fi
+		fi
+
+	else
+		# User hasn't requested to use the GPU-enabled version.
+		# So, it really doesn't matter what we set g_gpuEnabledEddy to.
+		g_gpuEnabledEddy="nothing"
 	fi
-	
-	# report
-	echo "-- ${scriptName}: Environment Variables Used - Start --"
-	echo "   FSLDIR: ${FSLDIR}"
-	echo "-- ${scriptName}: Environment Variables Used - End --"
 }
 
-get_fsl_version()
+#
+# Outputs:
+#   g_stdEddy - path to the standard (non-GPU) version of eddy
+#   g_gpuEnabledEddy - path to GPU-enabled version of eddy
+#
+determine_eddy_tools_to_use()
 {
 	local fsl_version_file
 	local fsl_version
-	local __functionResultVar=${1}
-
-	fsl_version_file="${FSLDIR}/etc/fslversion"
-
-	if [ -f ${fsl_version_file} ]; then
-		fsl_version=`cat ${fsl_version_file}`
-		log_Msg "INFO: Determined that the FSL version in use is ${fsl_version}"
-	else
-		log_Msg "ERROR: Cannot tell which version of FSL you are using."
-		exit 1
-	fi
-
-	eval $__functionResultVar="'${fsl_version}'"
-}
-
-#
-# NOTE:
-#   Don't echo anything in this function other than the last echo
-#   that outputs the return value
-#
-determine_old_or_new_fsl()
-{
-	local fsl_version=${1}
-	local old_or_new
 	local fsl_version_array
 	local fsl_primary_version
 	local fsl_secondary_version
 	local fsl_tertiary_version
-
-	# parse the FSL version information into primary, secondary, and tertiary parts
-	fsl_version_array=(${fsl_version//./ })
-
-	fsl_primary_version="${fsl_version_array[0]}"
-	fsl_primary_version=${fsl_primary_version//[!0-9]/}
 	
-	fsl_secondary_version="${fsl_version_array[1]}"
-	fsl_secondary_version=${fsl_secondary_version//[!0-9]/}
-	
-	fsl_tertiary_version="${fsl_version_array[2]}"
-	fsl_tertiary_version=${fsl_tertiary_version//[!0-9]/}
+	# get the current version of FSL in use
+	fsl_version_file="${FSLDIR}/etc/fslversion"
 
-	# determine whether we are using "OLD" or "NEW" FSL 
-	# 5.0.8 and below is "OLD"
-	# 5.0.9 and above is "NEW"
-
-	if [[ $(( ${fsl_primary_version} )) -lt 5 ]] ; then
-		# e.g. 4.x.x
-		old_or_new="OLD"
-	elif [[ $(( ${fsl_primary_version} )) -gt 5 ]] ; then
-		# e.g. 6.x.x
-		old_or_new="NEW"
+	if [ -f ${fsl_version_file} ]; then
+		fsl_version=$(cat ${fsl_version_file})
+		log_Msg "INFO: Determined that the FSL version in use is ${fsl_version}"
 	else
-		# e.g. 5.x.x
-		if [[ $(( ${fsl_secondary_version} )) -gt 0 ]] ; then
-			# e.g. 5.1.x
-			old_or_new="NEW"
-		else
-			# e.g. 5.0.x
-			if [[ $(( ${fsl_tertiary_version} )) -le 8 ]] ; then
-				# e.g. 5.0.1, 5.0.2, 5.0.3, 5.0.4 ... 5.0.8
-				old_or_new="OLD"
-			else
-				# e.g. 5.0.9 or 5.0.10 ...
-				old_or_new="NEW"
-			fi
-		fi
+		log_Err_Abort "Cannot tell which version of FSL you are using."
 	fi
 
-	echo ${old_or_new}
+	# break FSL version string into components
+	# primary, secondary, and tertiary
+	# FSL X.Y.Z would have X as primary, Y as secondary, and Z as tertiary versions
+
+	fsl_version_array=(${fsl_version//./ })
+	
+	fsl_primary_version="${fsl_version_array[0]}"
+	fsl_primary_version=${fsl_primary_version//[!0-9]/}
+
+	fsl_secondary_version="${fsl_version_array[1]}"
+	fsl_secondary_version=${fsl_secondary_version//[!0-9]/}
+
+	fsl_tertiary_version="${fsl_version_array[2]}"
+	fsl_tertiary_version=${fsl_tertiary_version//[!0-9]/}
+	
+	if [[ $(( ${fsl_primary_version} )) -lt 5 ]]; then
+		# e.g. 4.x.x
+		log_Err_Abort "FSL 5.0.7 or greater is required."
+
+	elif [[ $(( ${fsl_primary_version} )) -eq 5 ]]; then
+		# e.g. 5.x.x
+		if [[ $(( ${fsl_secondary_version} )) -gt 0 ]]; then
+			# e.g. 5.1.x, 5.2.x, 5.3.x, etc.
+			# There aren't any 5.1.x, 5.2.x, 5.3.x, etc. versions that we know
+			# at the time this code was written. We don't expect any such
+			# versions to ever exist. So it is unclear how to configure
+			# g_stdEddy and g_gpuEnabledEddy for any such versions.
+			log_Err_Abort "FSL version ${fsl_version} is currently unsupported"
+		else
+			# e.g. 5.0.x
+			if [[ $(( ${fsl_tertiary_version} )) -le 8 ]]; then
+				# 5.0.7 or 5.0.8
+				g_stdEddy="${FSLDIR}/bin/eddy"
+				g_gpuEnabledEddy="${FSLDIR}/bin/eddy.gpu"
+				log_Msg "Detected supported, pre-5.0.9 version of FSL"
+				log_Msg "Standard (non-GPU-enabled) version of eddy available: ${g_stdEddy}"
+				log_Msg "GPU-enabled version of eddy available: ${g_gpuEnabledEddy}"
+			else
+				# 5.0.9, 5.0.10, or 5.0.11
+				g_stdEddy="${FSLDIR}/bin/eddy_openmp"
+				g_gpuEnabledEddy="${FSLDIR}/bin/eddy_cuda"
+				log_Msg "Detected supported, 5 series, post-5.0.9 version of FSL"
+				log_Msg "Standard (non-GPU-enabled) version of eddy available: ${g_stdEddy}"
+				log_Msg "GPU-enabled version of eddy available: ${g_gpuEnabledEddy}"
+			fi
+		fi
+
+	elif [[ $(( ${fsl_primary_version} )) -eq 6 ]]; then
+		# e.g. 6.x.x
+		if [[ $(( ${fsl_secondary_version} )) -eq 0 ]]; then
+			# e.g. 6.0.x
+			if [[ $(( ${fsl_tertiary_version} )) -eq 0 ]]; then
+				# 6.0.0
+				log_Err_Abort "FSL version ${fsl_version} is currently unsupported"
+			else
+				# e.g. 6.0.1, 6.0.2, etc.
+				# At the time of this writing, only 6.0.1 exists. We expect
+				# any more in the 6.0.2, 6.0.3 series that are created will
+				# use the same file naming conventions.
+				determine_eddy_tools_for_supported_six_series
+			fi
+		else
+			# secondary version != 0 (means secondary version > 0)
+			# e.g. 6.1.x, 6.2.x, etc.
+			# These versions do not exist that we know of at this writing.
+			# But, for now, we'll assume that they will work like the 6.0.1
+			# version that we do know about.
+			determine_eddy_tools_for_supported_six_series
+		fi
+
+	elif [[ $(( ${fsl_primary_version} )) -gt 6 ]]; then
+		# e.g. 7.x.x
+		# These versions do not exist that we know of at this writing.
+		# For now, we'll assume that they will work like the 6.0.1 version.
+		determine_eddy_tools_for_supported_six_series		
+
+	else
+		# If we reach here, the primary version is:
+		# - not less than 5
+		# - not equal to 5
+		# - not equal to 6
+		# - not greater than 6
+		#
+		# This should be impossible. So we better report an error if it actually happens
+		# because that means the above logic has some fatal flaw in it or the
+		# FSL version number has some very expected value.
+		log_Err_Abort "Cannot figure out how to handle an FSL version like: ${fsl_version}"
+	fi
 }
 
 # 
@@ -382,42 +478,14 @@ main()
 	#
 	# Global Variables Set:
 	#  See documentation for get_options function
-	get_options $@
+	get_options "$@"
 	
-	# Validate environment variables
-	validate_environment_vars $@
+	# Determine the eddy tools to use
+	determine_eddy_tools_to_use
+
+	local stdEddy="${g_stdEddy}"
+	local gpuEnabledEddy="${g_gpuEnabledEddy}"
 	
-	# Establish tool name for logging
-	log_SetToolName "run_eddy.sh"
-
-	# Determine whether FSL version is "OLD" or "NEW"
-	get_fsl_version fsl_ver
-	log_Msg "FSL version: ${fsl_ver}"
-
-	old_or_new_version=$(determine_old_or_new_fsl ${fsl_ver})
-
-	# Set values for stdEddy (non-GPU-enabled version of eddy binary)
-	# and gpuEnabledEddy (GPU-enabled version of eddy binary) 
-	# based upon version of FSL being used.
-	# 
-	# stdEddy is "eddy" for FSL versions prior to FSL 5.0.9
-	#         is "eddy_openmp" for FSL versions starting with FSL 5.0.9
-	#
-	# gpuEnabledEddy is "eddy.gpu" for FSL versions prior to FSL 5.0.9 (may not exist)
-	#                is "eddy_cuda" for FSL versions starting with FSL 5.0.9
-	
-	if [ "${old_or_new_version}" == "OLD" ] ; then
-		log_Msg "INFO: Detected pre-5.0.9 version of FSL is in use."
-		gpuEnabledEddy="${FSLDIR}/bin/eddy.gpu"
-		stdEddy="${FSLDIR}/bin/eddy"
-	else
-		log_Msg "INFO: Detected 5.0.9 or newer version of FSL is in use."
-		gpuEnabledEddy="${FSLDIR}/bin/eddy_cuda"
-		stdEddy="${FSLDIR}/bin/eddy_openmp"
-	fi
-	log_Msg "gpuEnabledEddy: ${gpuEnabledEddy}"
-	log_Msg "stdEddy: ${stdEddy}"
-
 	# Determine which eddy executable to use based upon whether 
 	# the user requested use of the GPU-enabled version of eddy
 	# and whether the requested version of eddy can be found.
@@ -428,9 +496,7 @@ main()
 			log_Msg "GPU-enabled version of eddy found: ${gpuEnabledEddy}"
 			eddyExec="${gpuEnabledEddy}"
 		else
-			log_Msg "GPU-enabled version of eddy NOT found: ${gpuEnabledEddy}"
-			log_Msg "ABORTING"
-			exit 1
+			log_Err_Abort "GPU-enabled version of eddy NOT found: ${gpuEnabledEddy}"
 		fi
 	else
 		log_Msg "User did not request GPU-enabled version of eddy"
@@ -438,9 +504,7 @@ main()
 			log_Msg "Non-GPU-enabled version of eddy found: ${stdEddy}"
 			eddyExec="${stdEddy}"
 		else
-			log_Msg "Non-GPU-enabled version of eddy NOT found: ${stdEddy}"
-			log_Msg "ABORTING"
-			exit 1
+			log_Err_Abort "Non-GPU-enabled version of eddy NOT found: ${stdEddy}"
 		fi
 	fi
 	
@@ -512,6 +576,7 @@ main()
 	eddy_command+="${sep_offs_moveOption} "
 	eddy_command+="${rmsOption} "
 	eddy_command+="${ff_valOption} "
+	eddy_command+="--cnr_maps "
 	eddy_command+="--imain=${workingdir}/Pos_Neg "
 	eddy_command+="--mask=${workingdir}/nodif_brain_mask "
 	eddy_command+="--index=${workingdir}/index.txt "
@@ -550,7 +615,45 @@ main()
 	exit ${eddyReturnValue}
 }
 
+# ------------------------------------------------------------------------------
+#  "Global" processing - everything above here should be in a function
+# ------------------------------------------------------------------------------
+
+# Establish defaults
+
+# Set global variables
+g_script_name=$(basename "${0}")
+
+# Allow script to return a Usage statement, before any other output
+if [ "$#" = "0" ]; then
+    show_usage
+    exit 1
+fi
+
+# Verify that HCPPIPEDIR Environment variable is set
+if [ -z "${HCPPIPEDIR}" ]; then
+	echo "${g_script_name}: ABORTING: HCPPIPEDIR environment variable must be set"
+	exit 1
+fi
+
+# Load function libraries
+source "${HCPPIPEDIR}/global/scripts/debug.shlib" "$@"         # Debugging functions; also sources log.shlib
+source ${HCPPIPEDIR}/global/scripts/opts.shlib                 # Command line option functions
+
+opts_ShowVersionIfRequested $@
+
+if opts_CheckForHelpRequest $@; then
+	show_usage
+	exit 0
+fi
+
+${HCPPIPEDIR}/show_version
+
+# Verify required environment variables are set and log value
+log_Check_Env_Var HCPPIPEDIR
+log_Check_Env_Var FSLDIR
+
 #
-# Invoke the main function to get things started
+# Invoke the 'main' function to get things started
 #
 main $@

@@ -52,8 +52,11 @@ if [ -n "${command_line_specified_subj}" ]; then
 fi
 
 # Requirements for this script
-#  installed versions of: FSL (version 5.0.6), FreeSurfer (version 5.3.0-HCP), gradunwarp (HCP version 1.0.2)
-#  environment: FSLDIR , FREESURFER_HOME , HCPPIPEDIR , CARET7DIR , PATH (for gradient_unwarp.py)
+#  installed versions of: FSL, FreeSurfer, Connectome Workbench (wb_command), gradunwarp (HCP version)
+#  environment: HCPPIPEDIR, FSLDIR, FREESURFER_HOME, CARET7DIR, PATH for gradient_unwarp.py
+
+# If you want to use FreeSurfer 5.3, change the ${queuing_command} line below to use
+# ${HCPPIPEDIR}/FreeSurfer/FreeSurferPipeline-v5.3.0-HCP.sh
 
 #Set up pipeline environment variables and software
 source ${EnvironmentScript}
@@ -66,8 +69,6 @@ echo "$@"
     QUEUE="-q hcp_priority.q"
 #fi
 
-PRINTCOM=""
-#PRINTCOM="echo"
 #QUEUE="-q veryshort.q"
 
 
@@ -100,17 +101,15 @@ for Subject in $Subjlist ; do
       --subjectDIR="$SubjectDIR" \
       --t1="$T1wImage" \
       --t1brain="$T1wImageBrain" \
-      --t2="$T2wImage" \
-      --printcom=$PRINTCOM
+      --t2="$T2wImage"
       
   # The following lines are used for interactive debugging to set the positional parameters: $1 $2 $3 ...
 
-  echo "set -- --subject="$Subject" \
-      --subjectDIR="$SubjectDIR" \
-      --t1="$T1wImage" \
-      --t1brain="$T1wImageBrain" \
-      --t2="$T2wImage" \
-      --printcom=$PRINTCOM"
+  echo "set -- --subject=$Subject \
+      --subjectDIR=$SubjectDIR \
+      --t1=$T1wImage \
+      --t1brain=$T1wImageBrain \
+      --t2=$T2wImage"
 
   echo ". ${EnvironmentScript}"
 

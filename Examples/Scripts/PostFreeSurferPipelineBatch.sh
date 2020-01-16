@@ -52,8 +52,8 @@ if [ -n "${command_line_specified_subj}" ]; then
 fi
 
 # Requirements for this script
-#  installed versions of: FSL (version 5.0.6), FreeSurfer (version 5.3.0-HCP), gradunwarp (HCP version 1.0.2)
-#  environment: FSLDIR , FREESURFER_HOME , HCPPIPEDIR , CARET7DIR , PATH (for gradient_unwarp.py)
+#  installed versions of: FSL, Connectome Workbench (wb_command)
+#  environment: HCPPIPEDIR, FSLDIR, CARET7DIR
 
 #Set up pipeline environment variables and software
 source ${EnvironmentScript}
@@ -90,9 +90,8 @@ for Subject in $Subjlist ; do
   SubcorticalGrayLabels="${HCPPIPEDIR_Config}/FreeSurferSubcorticalLabelTableLut.txt"
   FreeSurferLabels="${HCPPIPEDIR_Config}/FreeSurferAllLut.txt"
   ReferenceMyelinMaps="${HCPPIPEDIR_Templates}/standard_mesh_atlases/Conte69.MyelinMap_BC.164k_fs_LR.dscalar.nii"
-  # RegName="MSMSulc" #MSMSulc is recommended, if binary is not available use FS (FreeSurfer)
-  RegName="FS" 
-
+  RegName="MSMSulc" #MSMSulc is recommended, if binary is not available use FS (FreeSurfer)
+  
   if [ -n "${command_line_specified_run_local}" ] ; then
       echo "About to run ${HCPPIPEDIR}/PostFreeSurfer/PostFreeSurferPipeline.sh"
       queuing_command=""

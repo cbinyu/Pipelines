@@ -1,3 +1,11 @@
+#use 'source $HCPPIPEDIR/global/scripts/log.shlib "$@"' to log the full command line originally run on error or abort
+if (($# > 0))
+then
+	log_FullCommand="$0 $*"
+else
+	log_FullCommand=""
+fi
+
 #
 # Description:
 #   sets the name of the tool to use for future logging
@@ -7,8 +15,67 @@
 #
 log_SetToolName()
 {
-	log_toolName="$1"
+	log_ToolName="$*"
 }
+#also set the default toolname on sourcing so that logging functions don't crash under set -eu
+log_SetToolName "$(basename -- "$0")"
+
+#
+# Description:
+#   Configure logging so that date and time are shown in log messages
+#
+log_SetShowDateTime()
+{
+	log_ShowDateTime="TRUE"
+}
+log_SetShowDateTime
+
+#
+# Description:
+#   Configure logging so that date and time are not shown in log messages
+#
+log_ClearShowDateTime()
+{
+	log_ShowDateTime="FALSE"
+}
+
+#
+# Description:
+#   Configure logging so that the tool name (i.e. script name) is shown in log messages
+#
+log_SetShowToolName()
+{
+	log_ShowToolName="TRUE"
+}
+log_SetShowToolName
+
+#
+# Description:
+#   Configure logging so that the tool name (i.e. script name) is not shown in log messages
+#
+log_ClearShowToolName()
+{
+	log_ShowToolName="FALSE"
+}
+
+#
+# Description:
+#   Configure logging so that the function name is shown in log messages
+#
+log_SetShowFunctionName()
+{
+	log_ShowFunctionName="TRUE"
+}
+
+#
+# Description:
+#   Configure logging so that the function name is NOT shown in log messages
+#
+log_ClearShowFunctionName()
+{
+	log_ShowFunctionName="FALSE"
+}
+log_ClearShowFunctionName
 
 #
 # Description:
@@ -19,18 +86,63 @@ log_SetToolName()
 #
 log_Msg()
 {
-	local msg="$*"
+	# capture parameters specifying message to output
+	local parameters="$*"
+
+	# get current date and time
 	local dateTime
 	dateTime=$(date)
-	local toolname
 
-	if [ -z "${log_toolName}" ]; then
+	# determine name of tool (script) being run
+	local toolname
+	if [ -z "${log_ToolName}" ]; then
 		toolname=$(basename ${0})
 	else
-		toolname="${log_toolName}"
+		toolname="${log_ToolName}"
 	fi
 
-	echo "${dateTime} - ${toolname}: ${msg}"
+	# determine name of function that called this log_Msg function
+	local functionname
+	functionname="${FUNCNAME[1]}"
+
+	# build full text to output
+	local msg=""
+
+	# default is to show the date and time
+	if [ -z "${log_ShowDateTime}" -o "${log_ShowDateTime}" == "TRUE" ]; then
+		if [ -z "${msg}" ]; then
+			msg+="${dateTime}"
+		else
+			msg+=":${dateTime}"
+		fi
+	fi
+
+	# default is to show the tool name
+	if [ -z "${log_ShowToolName}" -o "${log_ShowToolName}" == "TRUE" ]; then
+		if [ -z "${msg}" ]; then
+			msg+="${toolname}"
+		else
+			msg+=":${toolname}"
+		fi
+	fi
+
+	# default is NOT to show the function name
+	if [ "${log_ShowFunctionName}" == "TRUE" ]; then
+		if [ -z "${msg}" ]; then
+			msg+="${functionname}"
+		else
+			msg+=":${functionname}"
+		fi
+	fi
+
+	# always add the message/parameters specified 
+	if [ -z "${msg}" ]; then
+		msg+="${parameters}"
+	else
+		msg+=": ${parameters}"
+	fi
+	
+	echo "${msg}"
 }
 
 #
@@ -41,17 +153,28 @@ log_Msg()
 # Input:
 #   The parameters are the message to send to the standard output
 #
+log_full_command_shown=0
 log_Err_Abort()
 {
-	local msg="$*"
-	log_Msg "ABORTING: ${msg}"
+	log_Err "$*"
+	log_Msg "ABORTING"
 	exit 1
 }
 
 log_Err()
 {
 	local msg="$*"
-	log_Msg "ERROR: ${msg}"
+	if [[ ! -z "$log_FullCommand" ]] && ((! log_full_command_shown))
+	then
+		log_Msg "While running '$log_FullCommand':" 1>&2
+		log_full_command_shown=1
+	fi
+	log_Msg "ERROR: ${msg}" 1>&2
+	#-t checks for being a terminal - if stderr is redirected to a file, duplicate the error message on stdout
+	if [[ ! -t 2 ]]
+	then
+		log_Msg "ERROR: ${msg}"
+	fi
 }
 
 log_Warn()
@@ -100,8 +223,9 @@ log_File_Must_Exist()
 #
 # Description:
 #   Turn on debugging. Set a flag to indicate debugging messages
-#   should be logged
+#   should be logged - empty value means not on
 #
+log_debugOn=""
 log_Debug_On()
 {
 	log_debugOn="true"

@@ -1,15 +1,65 @@
 #!/bin/bash
-set -e
-echo -e "\n START: CreateRibbon"
 
-StudyFolder="$1"
-Subject="$2"
-T1wFolder="$3"
-AtlasSpaceFolder="$4"
-NativeFolder="$5"
-AtlasSpaceT1wImage="$6"
-T1wImage="$7"
-FreeSurferLabels="$8"
+# --------------------------------------------------------------------------------
+#  Usage Description Function
+# --------------------------------------------------------------------------------
+
+script_name=$(basename "${0}")
+
+show_usage() {
+	cat <<EOF
+
+${script_name}: Sub-script of PostFreeSurferPipeline.sh
+
+EOF
+}
+
+# Allow script to return a Usage statement, before any other output or checking
+if [ "$#" = "0" ]; then
+    show_usage
+    exit 1
+fi
+
+# ------------------------------------------------------------------------------
+#  Check that HCPPIPEDIR is defined and Load Function Libraries
+# ------------------------------------------------------------------------------
+
+if [ -z "${HCPPIPEDIR}" ]; then
+  echo "${script_name}: ABORTING: HCPPIPEDIR environment variable must be set"
+  exit 1
+fi
+
+source "${HCPPIPEDIR}/global/scripts/debug.shlib" "$@"         # Debugging functions; also sources log.shlib
+source ${HCPPIPEDIR}/global/scripts/opts.shlib                 # Command line option functions
+
+opts_ShowVersionIfRequested $@
+
+if opts_CheckForHelpRequest $@; then
+	show_usage
+	exit 0
+fi
+
+# ------------------------------------------------------------------------------
+#  Verify required environment variables are set and log value
+# ------------------------------------------------------------------------------
+
+log_Check_Env_Var HCPPIPEDIR
+log_Check_Env_Var CARET7DIR
+
+# ------------------------------------------------------------------------------
+#  Start work
+# ------------------------------------------------------------------------------
+
+log_Msg "START"
+
+StudyFolder="${1}"
+Subject="${2}"
+T1wFolder="${3}"
+AtlasSpaceFolder="${4}"
+NativeFolder="${5}"
+AtlasSpaceT1wImage="${6}"
+T1wImage="${7}"
+FreeSurferLabels="${8}"
 
 LeftGreyRibbonValue="3"
 LeftWhiteMaskValue="2"
@@ -71,5 +121,5 @@ fslmaths "$AtlasSpaceFolder"/"$NativeFolder"/"$Subject".L.ribbon.nii.gz -add "$A
 rm "$AtlasSpaceFolder"/"$NativeFolder"/"$Subject".L.ribbon.nii.gz "$AtlasSpaceFolder"/"$NativeFolder"/"$Subject".R.ribbon.nii.gz
 ${CARET7DIR}/wb_command -volume-label-import "$AtlasSpaceFolder"/ribbon.nii.gz "$FreeSurferLabels" "$AtlasSpaceFolder"/ribbon.nii.gz -drop-unused-labels
 
-echo -e "\n END: CreateRibbon"
+log_Msg "END"
 

@@ -5,7 +5,7 @@ DEFAULT_STUDY_FOLDER="${HOME}/data/Pipelines_ExampleData"
 DEFAULT_SUBJECT_LIST="100307"
 DEFAULT_ENVIRONMENT_SCRIPT="${HOME}/projects/Pipelines/Examples/Scripts/SetUpHCPPipeline.sh"
 DEFAULT_RUN_LOCAL="FALSE"
-DEFAULT_FIX_DIR="${HOME}/tools/fix1.06"
+#DEFAULT_FIXDIR="${HOME}/tools/fix1.06"  ##OPTIONAL: If not set will use $FSL_FIXDIR specified in EnvironmentScript
 
 #
 # Function Description
@@ -28,7 +28,7 @@ get_options() {
 	StudyFolder="${DEFAULT_STUDY_FOLDER}"
 	Subjlist="${DEFAULT_SUBJECT_LIST}"
 	EnvironmentScript="${DEFAULT_ENVIRONMENT_SCRIPT}"
-	FixDir="${DEFAULT_FIX_DIR}"
+	FixDir="${DEFAULT_FIXDIR}"
 	RunLocal="${DEFAULT_RUN_LOCAL}"
 
 	# parse arguments
@@ -87,11 +87,13 @@ get_options() {
 		exit 1
 	fi
 
-	if [ -z ${FixDir} ]
-	then
-		echo "ERROR: FixDir not specified"
-		exit 1
-	fi
+	# MPH: Allow FixDir to be empty at this point, so users can take advantage of the FSL_FIXDIR setting
+	# already in their EnvironmentScript
+#    if [ -z ${FixDir} ]
+#    then
+#        echo "ERROR: FixDir not specified"
+#        exit 1
+#    fi
 
 	if [ -z ${RunLocal} ]
 	then
@@ -104,10 +106,12 @@ get_options() {
 	echo "   StudyFolder: ${StudyFolder}"
 	echo "   Subjlist: ${Subjlist}"
 	echo "   EnvironmentScript: ${EnvironmentScript}"
-	echo "   FixDir: ${FixDir}"
+	if [ ! -z ${FixDir} ]; then
+		echo "   FixDir: ${FixDir}"
+	fi
 	echo "   RunLocal: ${RunLocal}"
 	echo "-- ${scriptName}: Specified Command-Line Options: -- End --"
-}
+}  # get_options()
 
 #
 # Function Description
@@ -122,59 +126,111 @@ main() {
 	# set up pipeline environment variables and software
 	source ${EnvironmentScript}
 
-	export FSL_FIXDIR=${FixDir}
-	FixScript=${HCPPIPEDIR}/ICAFIX/hcp_fix
+	# MPH: If DEFAULT_FIXDIR is set, or --FixDir argument was used, then use that to
+	# override the setting of FSL_FIXDIR in EnvironmentScript
+	if [ ! -z ${FixDir} ]; then
+		export FSL_FIXDIR=${FixDir}
+	fi
+
+	# set list of fMRI on which to run ICA+FIX, separate MR FIX groups with %, use spaces (or @ like dedrift...) to otherwise separate runs
+	# the MR FIX groups determine what gets concatenated before doing ICA
+	# the groups can be whatever you want, you can make a day 1 group and a day 2 group, or just concatenate everything, etc
+	fMRINames="tfMRI_WM_RL@tfMRI_WM_LR@tfMRI_GAMBLING_RL@tfMRI_GAMBLING_LR@tfMRI_MOTOR_RL@tfMRI_MOTOR_LR%tfMRI_LANGUAGE_RL@tfMRI_LANGUAGE_LR@tfMRI_SOCIAL_RL@tfMRI_SOCIAL_LR@tfMRI_RELATIONAL_RL@tfMRI_RELATIONAL_LR@tfMRI_EMOTION_RL@tfMRI_EMOTION_LR"
+
+	# If you wish to run "multi-run" (concatenated) FIX, specify the names to give the concatenated output files
+	# In this case, all the runs included in ${fMRINames} become the input to multi-run FIX
+	# Otherwise, leave ConcatNames empty (in which case "single-run" FIX is executed serially on each run in ${fMRINames})
+	ConcatNames=""
+	ConcatNames="tfMRI_WM_GAMBLING_MOTOR_RL_LR@tfMRI_LANGUAGE_SOCIAL_RELATIONAL_EMOTION_RL_LR"  ## Use space (or @) to separate concatenation groups
+
+	# set temporal highpass full-width (2*sigma) to use, in seconds, cannot be 0 for single-run FIX
+	bandpass=2000 
+	# MR FIX also supports 0 for a linear detrend, or "pdX" for a polynomial detrend of order X
+	# e.g., bandpass=pd1 is linear detrend (functionally equivalent to bandpass=0)
+	# bandpass=pd2 is a quadratic detrend
+	bandpass=0 #comment out for single run FIX and use above line for bandpass=2000
+
+	# set whether or not to regress motion parameters (24 regressors)
+	# out of the data as part of FIX (TRUE or FALSE)
+	domot=FALSE
+	
+	# set training data file
 	TrainingData=HCP_hp2000.RData
 
-	# validate environment variables
-	# validate_environment_vars $@
-
+	# set FIX threshold (controls sensitivity/specificity tradeoff)
+	FixThreshold=10
+	
+	#delete highpass files (note that delete intermediates=TRUE is not recommended for MR+FIX)
+	DeleteIntermediates=FALSE
+	
 	# establish queue for job submission
 	QUEUE="-q hcp_priority.q"
+	if [ "${RunLocal}" == "TRUE" ]; then
+		queuing_command=()
+	else
+		queuing_command=("${FSLDIR}/bin/fsl_sub" "${QUEUE}")
+	fi
 
-	# establish list of conditions on which to run ICA+FIX
-	CondList=""
-	CondList="${CondList} rfMRI_REST1"
-	CondList="${CondList} rfMRI_REST2"
-
-	# establish list of directions on which to run ICA+FIX
-	DirectionList=""
-	DirectionList="${DirectionList} RL"
-	DirectionList="${DirectionList} LR"
-
-	for Subject in ${Subjlist}
-	do
+	for Subject in ${Subjlist}; do
 		echo ${Subject}
 
-		for Condition in ${CondList}
-		do
-			echo "  ${Condition}"
+		ResultsFolder="${StudyFolder}/${Subject}/MNINonLinear/Results"
+		
+		if [ -z "${ConcatNames}" ]; then
+			# single-run FIX
+			FixScript=${HCPPIPEDIR}/ICAFIX/hcp_fix
+			
+			fMRINamesFlat=$(echo ${fMRINames} | sed 's/[@%]/ /g')
+			
+			for fMRIName in ${fMRINamesFlat}; do
+				echo "  ${fMRIName}"
 
-			for Direction in ${DirectionList}
-			do
-				echo "    ${Direction}"
-				
-				InputDir="${StudyFolder}/${Subject}/MNINonLinear/Results/${Condition}_${Direction}"
-				InputFile="${InputDir}/${Condition}_${Direction}.nii.gz"
+				InputFile="${ResultsFolder}/${fMRIName}/${fMRIName}"
 
-				bandpass=2000
-				
-				if [ "${RunLocal}" == "TRUE" ]
-				then
-					echo "About to run ${FixScript} ${InputFile} ${bandpass} ${TrainingData}"
-					queuing_command=""
-				else
-					echo "About to use fsl_sub to queue or run ${FixScript} ${InputFile} ${bandpass} ${TrainingData}"
-					queuing_command="${FSLDIR}/bin/fsl_sub ${QUEUE}"
-				fi
-
-				${queuing_command} ${FixScript} ${InputFile} ${bandpass} ${TrainingData}
+				cmd=("${queuing_command[@]}" "${FixScript}" "${InputFile}" ${bandpass} ${domot} "${TrainingData}" ${FixThreshold} "${DeleteIntermediates}")
+				echo "About to run: ${cmd[*]}"
+				"${cmd[@]}"
 			done
 
-		done
+		else
+        	#need arrays to sanity check number of concat groups
+        	IFS=' @' read -a concatarray <<< "${ConcatNames}"
+        	IFS=% read -a fmriarray <<< "${fMRINames}"
+        	
+        	if ((${#concatarray[@]} != ${#fmriarray[@]})); then
+        	    echo "ERROR: number of names in ConcatNames does not match number of fMRINames groups"
+        	    exit 1
+        	fi
+
+		    for ((i = 0; i < ${#concatarray[@]}; ++i))
+		    do
+				ConcatName="${concatarray[$i]}"
+				fMRINamesGroup="${fmriarray[$i]}"
+				# multi-run FIX
+				FixScript=${HCPPIPEDIR}/ICAFIX/hcp_fix_multi_run
+				ConcatFileName="${ResultsFolder}/${ConcatName}/${ConcatName}"
+
+				IFS=' @' read -a namesgrouparray <<< "${fMRINamesGroup}"
+				InputFile=""
+				for fMRIName in "${namesgrouparray[@]}"; do
+					if [[ "$InputFile" == "" ]]; then
+						InputFile="${ResultsFolder}/${fMRIName}/${fMRIName}"
+					else
+						InputFile+="@${ResultsFolder}/${fMRIName}/${fMRIName}"
+					fi
+				done
+
+				echo "  InputFile: ${InputFile}"
+
+				cmd=("${queuing_command[@]}" "${FixScript}" "${InputFile}" ${bandpass} "${ConcatFileName}" ${domot} "${TrainingData}" ${FixThreshold} "${DeleteIntermediates}")
+				echo "About to run: ${cmd[*]}"
+				"${cmd[@]}"
+			done
+
+		fi
 
 	done
-}
+}  # main()
 
 #
 # Invoke the main function to get things started

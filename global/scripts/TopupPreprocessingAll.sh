@@ -1,9 +1,33 @@
 #!/bin/bash 
-set -e
 
 # Requirements for this script
-#  installed versions of: FSL (version 5.0.6), HCP-gradunwarp (version 1.0.2)
-#  environment: as in SetUpHCPPipeline.sh  (or individually: FSLDIR, HCPPIPEDIR_Global, HCPPIPEDIR_Bin and PATH for gradient_unwarp.py)
+#  installed versions of: FSL, gradunwarp (HCP version)
+#  environment: HCPPIPEDIR, FSLDIR, HCPPIPEDIR_Global, PATH for gradient_unwarp.py
+
+# ------------------------------------------------------------------------------
+#  Verify required environment variables are set
+# ------------------------------------------------------------------------------
+
+if [ -z "${HCPPIPEDIR}" ]; then
+	echo "$(basename ${0}): ABORTING: HCPPIPEDIR environment variable must be set"
+	exit 1
+else
+	echo "$(basename ${0}): HCPPIPEDIR: ${HCPPIPEDIR}"
+fi
+
+if [ -z "${FSLDIR}" ]; then
+	echo "$(basename ${0}): ABORTING: FSLDIR environment variable must be set"
+	exit 1
+else
+	echo "$(basename ${0}): FSLDIR: ${FSLDIR}"
+fi
+
+if [ -z "${HCPPIPEDIR_Global}" ]; then
+	echo "$(basename ${0}): ABORTING: HCPPIPEDIR_Global environment variable must be set"
+	exit 1
+else
+	echo "$(basename ${0}): HCPPIPEDIR_Global: ${HCPPIPEDIR_Global}"
+fi
 
 ################################################ SUPPORT FUNCTIONS ##################################################
 
@@ -11,25 +35,28 @@ set -e
 #  Load Function Libraries
 # --------------------------------------------------------------------------------
 
-source $HCPPIPEDIR_Global/log.shlib # Logging related functions
+source "${HCPPIPEDIR}/global/scripts/debug.shlib" "$@" # Debugging functions; also sources log.shlib
 
 Usage() {
   echo "`basename $0`: Script for using topup to do distortion correction for EPI (scout)"
   echo " "
   echo "Usage: `basename $0` [--workingdir=<working directory>]"
-  echo "            --phaseone=<first set of SE EPI images: with -x PE direction (LR)>"
-  echo "            --phasetwo=<second set of SE EPI images: with x PE direction (RL)>"
+  echo "            --phaseone=<first set of SE EPI images: assumed to be the 'negative' PE direction>"
+  echo "            --phasetwo=<second set of SE EPI images: assumed to be the 'positive' PE direction>"
   echo "            --scoutin=<scout input image: should be corrected for gradient non-linear distortions>"
-  echo "            --echospacing=<effective echo spacing of EPI>"
-  echo "            --unwarpdir=<PE direction for unwarping: x/y/z/-x/-y/-z>"
+  echo "            --echospacing=<effective echo spacing of EPI, in seconds>"
+  echo "            --unwarpdir=<PE direction for unwarping according to the *voxel* axes: {x,y,x-,y-} or {i,j,i-,j-}>"
   echo "            [--owarp=<output warpfield image: scout to distortion corrected SE EPI>]"
   echo "            [--ofmapmag=<output 'Magnitude' image: scout to distortion corrected SE EPI>]" 
   echo "            [--ofmapmagbrain=<output 'Magnitude' brain image: scout to distortion corrected SE EPI>]"   
   echo "            [--ofmap=<output scaled topup field map image>]"
-  echo "            [--ojacobian=<output Jacobian image>]"
+  echo "            [--ojacobian=<output Jacobian image> (of the TOPUP warp field)]"
   echo "            --gdcoeffs=<gradient non-linearity distortion coefficients (Siemens format)>"
   echo "            [--topupconfig=<topup config file>]"
   echo "            --usejacobian=<\"true\" or \"false\">"
+  echo "                 Whether to apply the jacobian of the gradient non-linearity distortion correction"
+  echo "                 Irrelevant if --gdcoeffs=NONE"
+  echo "                 (Has nothing to do with the jacobian of the TOPUP warp field)"
   echo " "
   echo "   Note: the input SE EPI images should not be distortion corrected (for gradient non-linearities)"
 }
@@ -77,10 +104,10 @@ if [ $# -lt 7 ] ; then Usage; exit 1; fi
 
 # parse arguments
 WD=`getopt1 "--workingdir" $@`  # "$1"
-PhaseEncodeOne=`getopt1 "--phaseone" $@`  # "$2" #SCRIPT REQUIRES LR/X-/-1 VOLUME FIRST (SAME IS TRUE OF AP/PA)
-PhaseEncodeTwo=`getopt1 "--phasetwo" $@`  # "$3" #SCRIPT REQUIRES RL/X/1 VOLUME SECOND (SAME IS TRUE OF AP/PA)
+PhaseEncodeOne=`getopt1 "--phaseone" $@`  # "$2" #SCRIPT ASSUMES PhaseOne is the 'negative' direction when setting up the acqparams.txt file for TOPUP
+PhaseEncodeTwo=`getopt1 "--phasetwo" $@`  # "$3" #SCRIPT ASSUMES PhaseTwo is the 'positive' direction when setting up the acqparams.txt file for TOPUP
 ScoutInputName=`getopt1 "--scoutin" $@`  # "$4"
-DwellTime=`getopt1 "--echospacing" $@`  # "$5"
+EchoSpacing=`getopt1 "--echospacing" $@`  # "$5"
 UnwarpDir=`getopt1 "--unwarpdir" $@`  # "$6"
 DistortionCorrectionWarpFieldOutput=`getopt1 "--owarp" $@`  # "$7"
 DistortionCorrectionMagnitudeOutput=`getopt1 "--ofmapmag" $@`
@@ -99,8 +126,7 @@ fi
 #sanity check the jacobian option
 if [[ "$UseJacobian" != "true" && "$UseJacobian" != "false" ]]
 then
-    log_Msg "the --usejacobian option must be 'true' or 'false'"
-    exit 1
+    log_Err_Abort "the --usejacobian option must be 'true' or 'false'"
 fi
 
 GlobalScripts=${HCPPIPEDIR_Global}
@@ -125,20 +151,18 @@ echo " " >> $WD/log.txt
 #should we also check spacing info? could be off by tiny fractions, so probably not
 if [[ `fslhd $PhaseEncodeOne | grep '^dim[123]'` != `fslhd $ScoutInputName | grep '^dim[123]'` ]]
 then
-    log_Msg "Error: Spin echo fieldmap has different dimensions than scout image, this requires a manual fix"
-    exit 1
+    log_Err_Abort "Spin echo fieldmap has different dimensions than scout image, this requires a manual fix"
 fi
 #for kicks, check that the spin echo images match
 if [[ `fslhd $PhaseEncodeOne | grep '^dim[123]'` != `fslhd $PhaseEncodeTwo | grep '^dim[123]'` ]]
 then
-    log_Msg "Error: Spin echo fieldmap images have different dimensions!"
-    exit 1
+    log_Err_Abort "Spin echo fieldmap images have different dimensions!"
 fi
 
 # PhaseOne and PhaseTwo are sets of SE EPI images with opposite phase encodes
-${FSLDIR}/bin/imcp $PhaseEncodeOne ${WD}/PhaseOne.nii.gz
-${FSLDIR}/bin/imcp $PhaseEncodeTwo ${WD}/PhaseTwo.nii.gz
-${FSLDIR}/bin/imcp $ScoutInputName ${WD}/SBRef.nii.gz
+${FSLDIR}/bin/imcp $PhaseEncodeOne ${WD}/PhaseOne
+${FSLDIR}/bin/imcp $PhaseEncodeTwo ${WD}/PhaseTwo
+${FSLDIR}/bin/imcp $ScoutInputName ${WD}/SBRef
 
 # Apply gradient non-linearity distortion correction to input images (SE pair)
 if [ ! $GradientDistortionCoeffs = "NONE" ] ; then
@@ -166,20 +190,23 @@ if [ ! $GradientDistortionCoeffs = "NONE" ] ; then
   #NOTE: "SBref" is actually the input scout, which is actually the _gdc scout, with gdc jacobian applied if applicable
 
   # Make a dilated mask in the distortion corrected space
-  ${FSLDIR}/bin/fslmaths ${WD}/PhaseOne -abs -bin -dilD ${WD}/PhaseOne_mask
+  # 6/5/2019: Ensure that the mask is a single volume (via -Tmin flag) to handle changes in behavior of flirt and
+  # applywarp introduced with FSL 6 (e.g., with a 3 frame input as the ref (-r) volume, applywarp results in a 9 frame output)
+  ${FSLDIR}/bin/fslmaths ${WD}/PhaseOne -abs -bin -dilD -Tmin ${WD}/PhaseOne_mask
   ${FSLDIR}/bin/applywarp --rel --interp=nn -i ${WD}/PhaseOne_mask -r ${WD}/PhaseOne_mask -w ${WD}/PhaseOne_gdc_warp -o ${WD}/PhaseOne_mask_gdc
-  ${FSLDIR}/bin/fslmaths ${WD}/PhaseTwo -abs -bin -dilD ${WD}/PhaseTwo_mask
+  ${FSLDIR}/bin/fslmaths ${WD}/PhaseTwo -abs -bin -dilD -Tmin ${WD}/PhaseTwo_mask
   ${FSLDIR}/bin/applywarp --rel --interp=nn -i ${WD}/PhaseTwo_mask -r ${WD}/PhaseTwo_mask -w ${WD}/PhaseTwo_gdc_warp -o ${WD}/PhaseTwo_mask_gdc
 
   # Make a conservative (eroded) intersection of the two masks
   ${FSLDIR}/bin/fslmaths ${WD}/PhaseOne_mask_gdc -mas ${WD}/PhaseTwo_mask_gdc -ero -bin ${WD}/Mask
   # Merge both sets of images
   ${FSLDIR}/bin/fslmerge -t ${WD}/BothPhases ${WD}/PhaseOne_gdc ${WD}/PhaseTwo_gdc
+
 else 
-  cp ${WD}/PhaseOne.nii.gz ${WD}/PhaseOne_gdc.nii.gz
-  cp ${WD}/PhaseTwo.nii.gz ${WD}/PhaseTwo_gdc.nii.gz
+  ${FSLDIR}/bin/imcp ${WD}/PhaseOne ${WD}/PhaseOne_gdc
+  ${FSLDIR}/bin/imcp ${WD}/PhaseTwo ${WD}/PhaseTwo_gdc
   fslmerge -t ${WD}/BothPhases ${WD}/PhaseOne_gdc ${WD}/PhaseTwo_gdc
-  fslmaths ${WD}/PhaseOne_gdc.nii.gz -mul 0 -add 1 ${WD}/Mask
+  fslmaths ${WD}/BothPhases -mul 0 -add 1 -Tmin ${WD}/Mask  # Single volume containing all 1's
 fi
 
 
@@ -193,13 +220,16 @@ dimtOne=`${FSLDIR}/bin/fslval ${WD}/PhaseOne dim4`
 dimtTwo=`${FSLDIR}/bin/fslval ${WD}/PhaseTwo dim4`
 
 # Calculate the readout time and populate the parameter file appropriately
+# Total_readout=EffectiveEchoSpacing*(ReconMatrixPE-1)
+#  Factors such as in-plane acceleration, phase oversampling, phase resolution, phase field-of-view, and interpolation
+#  must already be accounted for as part of the "EffectiveEchoSpacing"
+
+# For UnwarpDir, allow for both {x,y} and {i,j} nomenclature
 # X direction phase encode
-if [[ $UnwarpDir = "x" || $UnwarpDir = "x-" || $UnwarpDir = "-x" ]] ; then
-  dimx=`${FSLDIR}/bin/fslval ${WD}/PhaseOne dim1`
-  nPEsteps=$(($dimx - 1))
-  #Total_readout=Echo_spacing*(#of_PE_steps-1)
-  #Note: the above calculation implies full k-space acquisition for SE EPI. In case of partial Fourier/k-space acquisition (though not recommended), $dimx-1 does not equal to nPEsteps. 
-  ro_time=`echo "scale=6; ${DwellTime} * ${nPEsteps}" | bc -l` #Compute Total_readout in secs with up to 6 decimal places
+if [[ $UnwarpDir = [xi] || $UnwarpDir = [xi]- || $UnwarpDir = -[xi] ]] ; then
+  dimP=`${FSLDIR}/bin/fslval ${WD}/PhaseOne dim1`
+  dimPminus1=$(($dimP - 1))
+  ro_time=`echo "scale=6; ${EchoSpacing} * ${dimPminus1}" | bc -l` #Compute Total_readout in secs with up to 6 decimal places
   log_Msg "Total readout time is $ro_time secs"
   i=1
   while [ $i -le $dimtOne ] ; do
@@ -214,11 +244,10 @@ if [[ $UnwarpDir = "x" || $UnwarpDir = "x-" || $UnwarpDir = "-x" ]] ; then
     i=`echo "$i + 1" | bc`
   done
 # Y direction phase encode
-elif [[ $UnwarpDir = "y" || $UnwarpDir = "y-" || $UnwarpDir = "-y" ]] ; then
-  dimy=`${FSLDIR}/bin/fslval ${WD}/PhaseOne dim2`
-  nPEsteps=$(($dimy - 1))
-  #Total_readout=Echo_spacing*(#of_PE_steps-1)
-  ro_time=`echo "scale=6; ${DwellTime} * ${nPEsteps}" | bc -l` #Compute Total_readout in secs with up to 6 decimal places
+elif [[ $UnwarpDir = [yj] || $UnwarpDir = [yj]- || $UnwarpDir = -[yj] ]] ; then
+  dimP=`${FSLDIR}/bin/fslval ${WD}/PhaseOne dim2`
+  dimPminus1=$(($dimP - 1))
+  ro_time=`echo "scale=6; ${EchoSpacing} * ${dimPminus1}" | bc -l` #Compute Total_readout in secs with up to 6 decimal places
   i=1
   while [ $i -le $dimtOne ] ; do
     echo "0 -1 0 $ro_time" >> $txtfname
@@ -231,6 +260,9 @@ elif [[ $UnwarpDir = "y" || $UnwarpDir = "y-" || $UnwarpDir = "-y" ]] ; then
     ShiftTwo="y"
     i=`echo "$i + 1" | bc`
   done
+else
+	# Per Jesper Anderson, topup does NOT allow PE dir to be along Z (no good reason, other than that made implementation easier)
+	log_Err_Abort "Invalid entry for --unwarpdir ($UnwarpDir)"
 fi
 
 #Pad in Z by one slice if odd so that topup does not complain (slice consists of zeros that will be dilated by following step)
@@ -238,10 +270,10 @@ numslice=`fslval ${WD}/BothPhases dim3`
 if [ ! $(($numslice % 2)) -eq "0" ] ; then
   log_Msg "Padding Z by one slice"
   for Image in ${WD}/BothPhases ${WD}/Mask ; do
-    fslroi ${Image} ${WD}/slice.nii.gz 0 -1 0 -1 0 1 0 -1
-    fslmaths ${WD}/slice.nii.gz -mul 0 ${WD}/slice.nii.gz
-    fslmerge -z ${Image} ${Image} ${WD}/slice.nii.gz
-    rm ${WD}/slice.nii.gz
+    fslroi ${Image} ${WD}/slice 0 -1 0 -1 0 1 0 -1
+    fslmaths ${WD}/slice -mul 0 ${WD}/slice
+    fslmerge -z ${Image} ${Image} ${WD}/slice
+    ${FSLDIR}/bin/imrm ${WD}/slice
   done
 fi
 
@@ -249,7 +281,8 @@ fi
 ${FSLDIR}/bin/fslmaths ${WD}/BothPhases -abs -add 1 -mas ${WD}/Mask -dilM -dilM -dilM -dilM -dilM ${WD}/BothPhases
 
 # RUN TOPUP
-# Needs FSL (version 5.0.6)
+# Needs FSL (version 5.0.6 or later)
+# Note: All the jacobian stuff from here onward is related to the TOPUP warp field
 ${FSLDIR}/bin/topup --imain=${WD}/BothPhases --datain=$txtfname --config=${TopupConfig} --out=${WD}/Coefficents --iout=${WD}/Magnitudes --fout=${WD}/TopupField --dfout=${WD}/WarpField --rbmout=${WD}/MotionMatrix --jacout=${WD}/Jacobian -v 
 
 #Remove Z slice padding if needed
@@ -261,50 +294,57 @@ if [ ! $(($numslice % 2)) -eq "0" ] ; then
 fi
 
 # UNWARP DIR = x,y
-if [[ $UnwarpDir = "x" || $UnwarpDir = "y" ]] ; then
+if [[ $UnwarpDir = [xyij] ]] ; then
   # select the first volume from PhaseTwo
   VolumeNumber=$(($dimtOne + 1))
   vnum=`${FSLDIR}/bin/zeropad $VolumeNumber 2`
   # register scout to SE input (PhaseTwo) + combine motion and distortion correction
-  ${FSLDIR}/bin/flirt -dof 6 -interp spline -in ${WD}/SBRef.nii.gz -ref ${WD}/PhaseTwo_gdc -omat ${WD}/SBRef2PhaseTwo_gdc.mat -out ${WD}/SBRef2PhaseTwo_gdc
+  ${FSLDIR}/bin/fslroi ${WD}/PhaseTwo_gdc ${WD}/PhaseTwo_gdc_one 0 1  # For flirt in FSL 6, -ref argument must be single 3D volume
+  ${FSLDIR}/bin/flirt -dof 6 -interp spline -in ${WD}/SBRef -ref ${WD}/PhaseTwo_gdc_one -omat ${WD}/SBRef2PhaseTwo_gdc.mat -out ${WD}/SBRef2PhaseTwo_gdc
   ${FSLDIR}/bin/convert_xfm -omat ${WD}/SBRef2WarpField.mat -concat ${WD}/MotionMatrix_${vnum}.mat ${WD}/SBRef2PhaseTwo_gdc.mat
-  ${FSLDIR}/bin/convertwarp --relout --rel -r ${WD}/PhaseTwo_gdc --premat=${WD}/SBRef2WarpField.mat --warp1=${WD}/WarpField_${vnum} --out=${WD}/WarpField.nii.gz
-  ${FSLDIR}/bin/imcp ${WD}/Jacobian_${vnum}.nii.gz ${WD}/Jacobian.nii.gz
+  ${FSLDIR}/bin/convertwarp --relout --rel -r ${WD}/PhaseTwo_gdc_one --premat=${WD}/SBRef2WarpField.mat --warp1=${WD}/WarpField_${vnum} --out=${WD}/WarpField
+  ${FSLDIR}/bin/imcp ${WD}/Jacobian_${vnum} ${WD}/Jacobian
   SBRefPhase=Two
 # UNWARP DIR = -x,-y
-elif [[ $UnwarpDir = "x-" || $UnwarpDir = "-x" || $UnwarpDir = "y-" || $UnwarpDir = "-y" ]] ; then
+elif [[ $UnwarpDir = [xyij]- || $UnwarpDir = -[xyij] ]] ; then
   # select the first volume from PhaseOne
   VolumeNumber=$((0 + 1))
   vnum=`${FSLDIR}/bin/zeropad $VolumeNumber 2`
   # register scout to SE input (PhaseOne) + combine motion and distortion correction
-  ${FSLDIR}/bin/flirt -dof 6 -interp spline -in ${WD}/SBRef.nii.gz -ref ${WD}/PhaseOne_gdc -omat ${WD}/SBRef2PhaseOne_gdc.mat -out ${WD}/SBRef2PhaseOne_gdc
+  ${FSLDIR}/bin/fslroi ${WD}/PhaseOne_gdc ${WD}/PhaseOne_gdc_one 0 1  # For flirt in FSL 6, -ref argument must be single 3D volume
+  ${FSLDIR}/bin/flirt -dof 6 -interp spline -in ${WD}/SBRef -ref ${WD}/PhaseOne_gdc_one -omat ${WD}/SBRef2PhaseOne_gdc.mat -out ${WD}/SBRef2PhaseOne_gdc
   ${FSLDIR}/bin/convert_xfm -omat ${WD}/SBRef2WarpField.mat -concat ${WD}/MotionMatrix_${vnum}.mat ${WD}/SBRef2PhaseOne_gdc.mat
-  ${FSLDIR}/bin/convertwarp --relout --rel -r ${WD}/PhaseOne_gdc --premat=${WD}/SBRef2WarpField.mat --warp1=${WD}/WarpField_${vnum} --out=${WD}/WarpField.nii.gz
-  ${FSLDIR}/bin/imcp ${WD}/Jacobian_${vnum}.nii.gz ${WD}/Jacobian.nii.gz
+  ${FSLDIR}/bin/convertwarp --relout --rel -r ${WD}/PhaseOne_gdc_one --premat=${WD}/SBRef2WarpField.mat --warp1=${WD}/WarpField_${vnum} --out=${WD}/WarpField
+  ${FSLDIR}/bin/imcp ${WD}/Jacobian_${vnum} ${WD}/Jacobian
   SBRefPhase=One
 fi
+
+# Make sure that the -r volume in applywarp is a single 3D volume to deal with changes (bug) in behavior
+# of applywarp introduced with FSL 6
 
 # PhaseTwo (first vol) - warp and Jacobian modulate to get distortion corrected output
 VolumeNumber=$(($dimtOne + 1))
   vnum=`${FSLDIR}/bin/zeropad $VolumeNumber 2`
-${FSLDIR}/bin/applywarp --rel --interp=spline -i ${WD}/PhaseTwo_gdc -r ${WD}/PhaseTwo_gdc --premat=${WD}/MotionMatrix_${vnum}.mat -w ${WD}/WarpField_${vnum} -o ${WD}/PhaseTwo_gdc_dc
+${FSLDIR}/bin/applywarp --rel --interp=spline -i ${WD}/PhaseTwo_gdc -r ${WD}/Mask --premat=${WD}/MotionMatrix_${vnum}.mat -w ${WD}/WarpField_${vnum} -o ${WD}/PhaseTwo_gdc_dc
 ${FSLDIR}/bin/fslmaths ${WD}/PhaseTwo_gdc_dc -mul ${WD}/Jacobian_${vnum} ${WD}/PhaseTwo_gdc_dc_jac
 # PhaseOne (first vol) - warp and Jacobian modulate to get distortion corrected output
 VolumeNumber=$((0 + 1))
   vnum=`${FSLDIR}/bin/zeropad $VolumeNumber 2`
-${FSLDIR}/bin/applywarp --rel --interp=spline -i ${WD}/PhaseOne_gdc -r ${WD}/PhaseOne_gdc --premat=${WD}/MotionMatrix_${vnum}.mat -w ${WD}/WarpField_${vnum} -o ${WD}/PhaseOne_gdc_dc
+${FSLDIR}/bin/applywarp --rel --interp=spline -i ${WD}/PhaseOne_gdc -r ${WD}/Mask --premat=${WD}/MotionMatrix_${vnum}.mat -w ${WD}/WarpField_${vnum} -o ${WD}/PhaseOne_gdc_dc
 ${FSLDIR}/bin/fslmaths ${WD}/PhaseOne_gdc_dc -mul ${WD}/Jacobian_${vnum} ${WD}/PhaseOne_gdc_dc_jac
 
 # Scout - warp and Jacobian modulate to get distortion corrected output
-${FSLDIR}/bin/applywarp --rel --interp=spline -i ${WD}/SBRef.nii.gz -r ${WD}/SBRef.nii.gz -w ${WD}/WarpField.nii.gz -o ${WD}/SBRef_dc.nii.gz
-${FSLDIR}/bin/fslmaths ${WD}/SBRef_dc.nii.gz -mul ${WD}/Jacobian.nii.gz ${WD}/SBRef_dc_jac.nii.gz
+${FSLDIR}/bin/applywarp --rel --interp=spline -i ${WD}/SBRef -r ${WD}/SBRef -w ${WD}/WarpField -o ${WD}/SBRef_dc
+${FSLDIR}/bin/fslmaths ${WD}/SBRef_dc -mul ${WD}/Jacobian ${WD}/SBRef_dc_jac
 
 # Calculate Equivalent Field Map
 ${FSLDIR}/bin/fslmaths ${WD}/TopupField -mul 6.283 ${WD}/TopupField
-${FSLDIR}/bin/fslmaths ${WD}/Magnitudes.nii.gz -Tmean ${WD}/Magnitude.nii.gz
+${FSLDIR}/bin/fslmaths ${WD}/Magnitudes -Tmean ${WD}/Magnitude
 ${FSLDIR}/bin/bet ${WD}/Magnitude ${WD}/Magnitude_brain -f 0.35 -m #Brain extract the magnitude image
 
 # copy images to specified outputs
+# explicitly include .nii.gz suffix on outputs here, to avoid any ambiguity between files
+# vs directories with the same (base)name
 if [ ! -z ${DistortionCorrectionWarpFieldOutput} ] ; then
   ${FSLDIR}/bin/imcp ${WD}/WarpField.nii.gz ${DistortionCorrectionWarpFieldOutput}.nii.gz
 fi
